@@ -9,6 +9,15 @@ dist-ssr
 *.local
 *.tsbuildinfo
 
+# Local env files
+.env
+.env.local
+.env.*.local
+
+# bkit internal session metadata
+docs/.bkit-memory.json
+docs/.pdca-status.json
+
 # Editor
 .vscode/*
 !.vscode/extensions.json
