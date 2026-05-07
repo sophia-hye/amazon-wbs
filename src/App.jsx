@@ -197,7 +197,7 @@ export default function App() {
                               wbs={wbs} doneMap={doneMap} marketLabel={profile.market} />,
     wbs:       <WBSPage wbs={wbs} setWbs={setWbs} expanded={expanded} setExpanded={setExpanded}
                         doneMap={doneMap} setDoneMap={setDoneMap} />,
-    calendar:  <CalendarPage events={events} setEvents={setEvents} />,
+    calendar:  <CalendarPage events={events} setEvents={setEvents} wbs={wbs} />,
     log:       <DailyLogPage logs={logs} setLogs={setLogs} wbs={wbs}
                               doneMap={doneMap} setDoneMap={setDoneMap}
                               wraps={wraps} setWraps={setWraps} initialView="daily" />,

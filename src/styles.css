@@ -694,7 +694,9 @@ button { font: inherit; color: inherit; }
 }
 .gantt-bar:active { cursor: grabbing; }
 .gantt-bar.dragging { box-shadow: 0 4px 12px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.3); opacity: .92; }
-.gantt-bar.parent { background: var(--purple); }
+.gantt-bar.parent { background: var(--purple); cursor: default; }
+.gantt-bar.readonly,
+.gantt-bar.readonly:active { cursor: default; }
 .gantt-bar.done { background: var(--green); opacity: .85; }
 .gantt-bar.late { background: var(--red); }
 .gantt-bar .bar-label { pointer-events: none; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; opacity: .95; }

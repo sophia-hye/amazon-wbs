@@ -390,6 +390,26 @@ function removeNodeFromTree(tree, id) {
     .map((n) => (n.children && n.children.length ? { ...n, children: removeNodeFromTree(n.children, id) } : n))
 }
 
+/**
+ * Aggregate effective date range for a node.
+ *  - Leaf: returns its own start/end.
+ *  - Parent: returns min(start) / max(end) over all descendants. The parent's
+ *    own stored dates are ignored visually so that adding a child outside the
+ *    parent's range still extends the parent's bar.
+ */
+function aggregateRange(node) {
+  if (!node.children || !node.children.length) {
+    return { start: node.start || null, end: node.end || null }
+  }
+  let minS = null, maxE = null
+  for (const c of node.children) {
+    const r = aggregateRange(c)
+    if (r.start && (!minS || r.start < minS)) minS = r.start
+    if (r.end && (!maxE || r.end > maxE)) maxE = r.end
+  }
+  return { start: minS || node.start || null, end: maxE || node.end || null }
+}
+
 function computeGanttRange(wbs) {
   // Always span from current month start to year-end (Dec 31), extending if
   // any task lives outside that window.
@@ -648,12 +668,20 @@ export function WBSPage({ wbs, setWbs, expanded, setExpanded, doneMap, setDoneMa
                   </div>
                 </div>
                 {ganttRows.map(node => {
-                  // Apply drag overlay (visual-only) before computing bar geometry
-                  const overlay = dragRef.current && dragRef.current.id === node.id ? dragRef.current : null
-                  let effStart = node.start, effEnd = node.end
+                  // Parents: aggregate range from descendants. Leaves: own dates.
+                  const isParent = node.hasChildren
+                  let baseStart = node.start, baseEnd = node.end
+                  if (isParent) {
+                    const r = aggregateRange(node)
+                    baseStart = r.start || node.start
+                    baseEnd = r.end || node.end
+                  }
+                  // Apply drag overlay (visual-only) only on leaves
+                  const overlay = !isParent && dragRef.current && dragRef.current.id === node.id ? dragRef.current : null
+                  let effStart = baseStart, effEnd = baseEnd
                   if (overlay && overlay.dayDelta !== 0) {
-                    if (overlay.mode === 'move' || overlay.mode === 'resize-start') effStart = addDaysISO(node.start, overlay.dayDelta)
-                    if (overlay.mode === 'move' || overlay.mode === 'resize-end') effEnd = addDaysISO(node.end, overlay.dayDelta)
+                    if (overlay.mode === 'move' || overlay.mode === 'resize-start') effStart = addDaysISO(baseStart, overlay.dayDelta)
+                    if (overlay.mode === 'move' || overlay.mode === 'resize-end') effEnd = addDaysISO(baseEnd, overlay.dayDelta)
                     if (effStart && effEnd && effStart > effEnd) {
                       if (overlay.mode === 'resize-start') effStart = effEnd
                       else if (overlay.mode === 'resize-end') effEnd = effStart
@@ -700,15 +728,19 @@ export function WBSPage({ wbs, setWbs, expanded, setExpanded, doneMap, setDoneMa
                             const isToday = sameDay(d, today);
                             return <div key={i} className={"gantt-cell" + (dow===0||dow===6?" weekend":"") + (isToday?" today":"")}/>;
                           })}
-                          <div className={"gantt-bar " + klass + (overlay ? " dragging" : "")}
+                          <div className={"gantt-bar " + klass + (overlay ? " dragging" : "") + (isParent ? " readonly" : "")}
                                style={{ left: `calc(${(start/ganttDays)*100}% + 2px)`, width: `calc(${(span/ganttDays)*100}% - 4px)` }}
-                               onMouseDown={(e) => startDrag(e, 'move', node)}
-                               title="드래그: 이동 / 가장자리 드래그: 기간 조정">
-                            <span className="bar-handle bar-handle-l"
-                                  onMouseDown={(e) => startDrag(e, 'resize-start', node)}/>
+                               onMouseDown={isParent ? undefined : (e) => startDrag(e, 'move', node)}
+                               title={isParent ? "하위 작업 일정으로 자동 계산됨" : "드래그: 이동 / 가장자리 드래그: 기간 조정"}>
+                            {!isParent && (
+                              <span className="bar-handle bar-handle-l"
+                                    onMouseDown={(e) => startDrag(e, 'resize-start', node)}/>
+                            )}
                             {span > 3 && <span className="bar-label">{node.title}</span>}
-                            <span className="bar-handle bar-handle-r"
-                                  onMouseDown={(e) => startDrag(e, 'resize-end', node)}/>
+                            {!isParent && (
+                              <span className="bar-handle bar-handle-r"
+                                    onMouseDown={(e) => startDrag(e, 'resize-end', node)}/>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -798,7 +830,7 @@ export function WBSPage({ wbs, setWbs, expanded, setExpanded, doneMap, setDoneMa
 }
 
 // ===== CALENDAR =====
-export function CalendarPage({ events, setEvents }) {
+export function CalendarPage({ events, setEvents, wbs = [] }) {
   const [cursor, setCursor] = useState(() => startOfMonth());
   const [newEventDate, setNewEventDate] = useState(null);
   const [newEventTitle, setNewEventTitle] = useState("");
@@ -809,6 +841,51 @@ export function CalendarPage({ events, setEvents }) {
   const startDow = firstOfMonth.getDay();
   const daysInMonth = lastOfMonth.getDate();
   const today = todayDate();
+
+  // ── WBS auto-sync: every leaf task's date range becomes a derived event
+  //    on each day from start to end. Distinguished by source: 'wbs' + purple.
+  const fmtKey = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  const wbsEvents = useMemo(() => {
+    const out = [];
+    const walk = (nodes) => nodes.forEach((n) => {
+      const isLeaf = !n.children || n.children.length === 0;
+      if (isLeaf) {
+        if (!n.start) return;
+        const startD = new Date(n.start);
+        if (isNaN(startD.getTime())) return;
+        const endD = n.end ? new Date(n.end) : startD;
+        const cur = new Date(startD);
+        let safety = 0;
+        while (cur <= endD && safety < 366) {
+          out.push({
+            id: `wbs-${n.id}-${fmtKey(cur)}`,
+            date: fmtKey(cur),
+            title: n.title,
+            color: 'purple',
+            source: 'wbs',
+            linked: n.id,
+          });
+          cur.setDate(cur.getDate() + 1);
+          safety += 1;
+        }
+      } else if (n.children) {
+        walk(n.children);
+      }
+    });
+    walk(wbs);
+    return out;
+  }, [wbs]);
+
+  const wbsLeafCount = useMemo(() => {
+    let n = 0;
+    const walk = (nodes) => nodes.forEach((node) => {
+      const isLeaf = !node.children || node.children.length === 0;
+      if (isLeaf && node.start) n += 1;
+      else if (!isLeaf && node.children) walk(node.children);
+    });
+    walk(wbs);
+    return n;
+  }, [wbs]);
 
   // Build 6-week grid
   const cells = [];
@@ -828,11 +905,9 @@ export function CalendarPage({ events, setEvents }) {
 
   const eventsByDate = useMemo(() => {
     const m = {};
-    events.forEach(e => { (m[e.date] = m[e.date] || []).push(e); });
+    [...events, ...wbsEvents].forEach((e) => { (m[e.date] = m[e.date] || []).push(e); });
     return m;
-  }, [events]);
-
-  const fmtKey = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  }, [events, wbsEvents]);
 
   const addEvent = () => {
     if (!newEventTitle.trim()) { setNewEventDate(null); return; }
@@ -850,7 +925,10 @@ export function CalendarPage({ events, setEvents }) {
       <div className="page-header">
         <div>
           <h1 className="page-title">{monthName}</h1>
-          <p className="page-subtitle">{events.length}개의 일정 · WBS와 자동 연동</p>
+          <p className="page-subtitle">
+            {events.length}개 일정
+            {wbsLeafCount > 0 && ` · WBS 작업 ${wbsLeafCount}개 자동 표시`}
+          </p>
         </div>
         <div className="page-actions">
           <div className="segmented">
