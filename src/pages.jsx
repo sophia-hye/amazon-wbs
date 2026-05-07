@@ -466,82 +466,30 @@ export function WBSPage({ wbs, setWbs, expanded, setExpanded, doneMap, setDoneMa
       )}
 
       {(wbs.length > 0 || adding === "__root") && (
-        <div className="wbs-layout">
-          <div>
-            <div className="tree">
-              {flat.map(node => {
-                const pct = computeProgress(node, doneMap);
-                const checked = doneMap[node.id] || node.status === "done";
-                return (
-                  <div key={node.id}>
-                    <div className={"tree-row" + (node.hasChildren ? " parent" : "")}
-                         data-selected={selected === node.id}
-                         onClick={() => setSelected(node.id)}
-                         style={{ paddingLeft: 8 + node.depth * 18 }}>
-                      {node.hasChildren ? (
-                        <div className={"chev" + (expanded[node.id] ? " open" : "")}
-                             onClick={(e) => { e.stopPropagation(); toggleExpand(node.id); }}>
-                          <IChev size={12}/>
-                        </div>
-                      ) : <div className="chev spacer"/>}
-                      <button className={"check" + (checked ? " checked" : "")}
-                              onClick={(e) => { e.stopPropagation(); toggleDone(node.id); }}>
-                        {checked && <ICheck size={12}/>}
-                      </button>
-                      <div className="label">
-                        <span style={{textDecoration: checked ? "line-through" : "none", color: checked ? "var(--fg-tertiary)" : "var(--fg)"}}>
-                          {node.title}
-                        </span>
-                        {node.owner && <span className="sub">· {node.owner}</span>}
-                      </div>
-                      <div className="progress"><i style={{width:`${pct}%`}}/></div>
-                      <div className="pct">{pct}%</div>
-                    </div>
-                    {adding === node.id && (
-                      <div className="add-row" style={{ marginLeft: 8 + (node.depth + 1) * 18 }}>
-                        <input autoFocus placeholder="새 하위 작업..." value={newTitle}
-                               onChange={(e) => setNewTitle(e.target.value)}
-                               onKeyDown={(e) => { if (e.key === "Enter") addChild(node.id); if (e.key === "Escape") setAdding(null); }}/>
-                        <button className="btn btn-primary" onClick={() => addChild(node.id)}>추가</button>
-                        <button className="btn" onClick={() => setAdding(null)}>취소</button>
-                      </div>
-                    )}
-                    {selected === node.id && adding !== node.id && (
-                      <div style={{paddingLeft: 8 + (node.depth + 1) * 18, padding: "2px 8px 2px " + (28 + node.depth * 18) + "px"}}>
-                        <button className="nav-item" style={{padding:"4px 8px",fontSize:12,color:"var(--accent)"}}
-                                onClick={() => { setAdding(node.id); setNewTitle(""); }}>
-                          <IPlus size={12}/> <span>하위 작업 추가</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              {adding === "__root" && (
-                <div className="add-row">
-                  <input autoFocus placeholder="새 프로젝트..." value={newTitle}
-                         onChange={(e) => setNewTitle(e.target.value)}
-                         onKeyDown={(e) => {
-                           if (e.key === "Enter") {
-                             if (!newTitle.trim()) { setAdding(null); return; }
-                             const id = (typeof crypto !== 'undefined' && crypto.randomUUID)
-                               ? crypto.randomUUID()
-                               : `n${Date.now()}`;
-                             const today = todayISO();
-                             setWbs([...wbs, { id, title: newTitle, parent: null, owner: "", start: today, end: today, status: "todo", children: [] }]);
-                             setNewTitle(""); setAdding(null);
-                           }
-                           if (e.key === "Escape") setAdding(null);
-                         }}/>
-                  <button className="btn" onClick={() => setAdding(null)}>취소</button>
-                </div>
-              )}
+        <>
+          {adding === "__root" && (
+            <div className="add-row" style={{ marginBottom: 12, maxWidth: 480 }}>
+              <input autoFocus placeholder="새 프로젝트..." value={newTitle}
+                     onChange={(e) => setNewTitle(e.target.value)}
+                     onKeyDown={(e) => {
+                       if (e.key === "Enter") {
+                         if (!newTitle.trim()) { setAdding(null); return; }
+                         const id = (typeof crypto !== 'undefined' && crypto.randomUUID)
+                           ? crypto.randomUUID()
+                           : `n${Date.now()}`;
+                         const today = todayISO();
+                         setWbs([...wbs, { id, title: newTitle, parent: null, owner: "", start: today, end: today, status: "todo", children: [] }]);
+                         setNewTitle(""); setAdding(null);
+                       }
+                       if (e.key === "Escape") setAdding(null);
+                     }}/>
+              <button className="btn" onClick={() => setAdding(null)}>취소</button>
             </div>
-          </div>
+          )}
 
           {wbs.length > 0 && (
             <div className="gantt">
-              <div className="gantt-grid" style={{ minWidth: Math.max(800, ganttDays * 28) }}>
+              <div className="gantt-grid" style={{ minWidth: Math.max(880, ganttDays * 28 + 280) }}>
                 <div className="gantt-head">
                   <div className="label-th">{ganttHeadLabel}</div>
                   <div className="gantt-days" style={{gridTemplateColumns:`repeat(${ganttDays}, 1fr)`}}>
@@ -564,6 +512,7 @@ export function WBSPage({ wbs, setWbs, expanded, setExpanded, doneMap, setDoneMa
                   const pct = computeProgress(node, doneMap);
                   const klass = node.hasChildren ? "parent" : (pct === 100 ? "done" : "");
                   const isSelected = selected === node.id;
+                  const checked = doneMap[node.id] || node.status === "done";
                   return (
                     <React.Fragment key={node.id}>
                       <div className="gantt-row" data-selected={isSelected}>
@@ -578,7 +527,17 @@ export function WBSPage({ wbs, setWbs, expanded, setExpanded, doneMap, setDoneMa
                                 : <IChev size={12} style={{color:"var(--fg-tertiary)"}}/>}
                             </span>
                           ) : <span style={{width:12,display:"inline-block"}}/>}
-                          <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{node.title}</span>
+                          <button className={"check" + (checked ? " checked" : "")}
+                                  onClick={(e) => { e.stopPropagation(); toggleDone(node.id); }}>
+                            {checked && <ICheck size={11}/>}
+                          </button>
+                          <span className="gantt-name-text"
+                                style={{textDecoration: checked ? "line-through" : "none", color: checked ? "var(--fg-tertiary)" : "var(--fg)"}}>
+                            {node.title}
+                            {node.owner && <span className="sub"> · {node.owner}</span>}
+                          </span>
+                          <div className="gantt-name-progress"><i style={{width:`${pct}%`}}/></div>
+                          <span className="gantt-name-pct">{pct}%</span>
                         </div>
                         <div className="gantt-track" style={{gridTemplateColumns:`repeat(${ganttDays}, 1fr)`}}>
                           {days.map((d,i) => {
@@ -617,7 +576,7 @@ export function WBSPage({ wbs, setWbs, expanded, setExpanded, doneMap, setDoneMa
               </div>
             </div>
           )}
-        </div>
+        </>
       )}
     </div>
   );

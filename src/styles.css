@@ -510,7 +510,7 @@ button { font: inherit; color: inherit; }
 .gantt-grid { position: relative; min-width: 800px; }
 .gantt-head {
   display: grid;
-  grid-template-columns: 180px 1fr;
+  grid-template-columns: 280px 1fr;
   border-bottom: 0.5px solid var(--separator);
 }
 .gantt-head .label-th {
@@ -531,7 +531,7 @@ button { font: inherit; color: inherit; }
 .gantt-day.weekend { background: var(--bg-input); }
 .gantt-row {
   display: grid;
-  grid-template-columns: 180px 1fr;
+  grid-template-columns: 280px 1fr;
   border-bottom: 0.5px solid var(--separator);
   height: 38px;
   align-items: stretch;
@@ -556,8 +556,58 @@ button { font: inherit; color: inherit; }
   padding: 2px;
   border-radius: 3px;
   cursor: default;
+  flex-shrink: 0;
 }
 .gantt-chev:hover { background: var(--bg-active); }
+
+/* Gantt name: checkbox + title + owner subscript + progress + percentage */
+.gantt-name .check {
+  width: 16px; height: 16px;
+  border-radius: 4px;
+  border: 1.5px solid var(--border-strong);
+  display: grid; place-items: center;
+  flex: 0 0 16px;
+  background: transparent;
+  color: white; cursor: default;
+  transition: all .15s;
+  padding: 0;
+}
+.gantt-name .check.checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.gantt-name-text {
+  flex: 1; min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gantt-name-text .sub {
+  font-size: 11.5px;
+  color: var(--fg-tertiary);
+  margin-left: 2px;
+}
+.gantt-name-progress {
+  width: 44px; height: 4px;
+  background: var(--bg-input);
+  border-radius: 999px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.gantt-name-progress > i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: inherit;
+}
+.gantt-name-pct {
+  font-size: 11px;
+  color: var(--fg-tertiary);
+  width: 30px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
 
 .gantt-add-row-line {
   display: flex;
