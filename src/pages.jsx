@@ -1143,10 +1143,6 @@ ${weekLogs.map(l => `[${l.date}] ${l.title}\n${l.body}`).join("\n\n")}
             <p className="page-subtitle">{fmtDate(weekCursor)} – {fmtDate(weekEnd)} · {weekKey} · {weekLogs.length}개 일지</p>
           </div>
           <div className="page-actions">
-            <div className="segmented">
-              <button aria-pressed={view==="daily"} onClick={()=>setView("daily")}>Daily</button>
-              <button aria-pressed={view==="weekly"} onClick={()=>setView("weekly")}>Weekly</button>
-            </div>
             <button className="icon-btn" onClick={()=>{
               const d = new Date(weekCursor); d.setDate(d.getDate()-7);
               setWeekCursor(getWeekStart(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`));
@@ -1278,12 +1274,6 @@ ${weekLogs.map(l => `[${l.date}] ${l.title}\n${l.body}`).join("\n\n")}
             <h1 className="page-title">Daily Log</h1>
             <p className="page-subtitle">매일의 운영 기록 · 0개 항목</p>
           </div>
-          <div className="page-actions">
-            <div className="segmented">
-              <button aria-pressed={view==="daily"} onClick={()=>setView("daily")}>Daily</button>
-              <button aria-pressed={view==="weekly"} onClick={()=>setView("weekly")}>Weekly</button>
-            </div>
-          </div>
         </div>
         <div className="empty-state">
           <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 4 }}>아직 작성된 일지가 없습니다</div>
@@ -1306,10 +1296,6 @@ ${weekLogs.map(l => `[${l.date}] ${l.title}\n${l.body}`).join("\n\n")}
           <p className="page-subtitle">매일의 운영 기록 · {logs.length}개 항목</p>
         </div>
         <div className="page-actions">
-          <div className="segmented">
-            <button aria-pressed={view==="daily"} onClick={()=>setView("daily")}>Daily</button>
-            <button aria-pressed={view==="weekly"} onClick={()=>setView("weekly")}>Weekly</button>
-          </div>
           <button className="btn btn-primary" onClick={newLog}><IPlus size={14}/><span>새 일지</span></button>
         </div>
       </div>
