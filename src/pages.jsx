@@ -1,5 +1,5 @@
 // Pages: Dashboard, WBS, Calendar, Daily Log
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import {
   IFilter, IPlus, IChev, IChevD, IChevL, IChevR, ICheck,
   IDollar, ICart, ITrend,
@@ -366,55 +366,188 @@ export function DashboardPage({ skus, campaigns, events, wbs, doneMap, marketLab
 }
 
 // ===== WBS =====
+const DAY_PX = 28
+
+function addDaysISO(iso, days) {
+  if (!iso) return iso
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  d.setDate(d.getDate() + days)
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+}
+
+function updateNodeInTree(tree, id, updater) {
+  return tree.map((n) => {
+    if (n.id === id) return updater(n)
+    if (n.children && n.children.length) return { ...n, children: updateNodeInTree(n.children, id, updater) }
+    return n
+  })
+}
+
+function removeNodeFromTree(tree, id) {
+  return tree
+    .filter((n) => n.id !== id)
+    .map((n) => (n.children && n.children.length ? { ...n, children: removeNodeFromTree(n.children, id) } : n))
+}
+
 function computeGanttRange(wbs) {
+  // Always span from current month start to year-end (Dec 31), extending if
+  // any task lives outside that window.
   const today = todayDate()
-  const fallbackStart = startOfMonth(today)
-  const fallbackEnd = endOfMonth(today)
-  if (!wbs.length) {
-    return { start: fallbackStart, days: fallbackEnd.getDate() }
-  }
-  let minD = null, maxD = null
+  let earliest = startOfMonth(today)
+  let latest = new Date(today.getFullYear(), 11, 31)
   const walk = (nodes) => nodes.forEach((n) => {
-    if (n.start) { const d = new Date(n.start); if (!isNaN(d.getTime()) && (!minD || d < minD)) minD = d }
-    if (n.end) { const d = new Date(n.end); if (!isNaN(d.getTime()) && (!maxD || d > maxD)) maxD = d }
+    if (n.start) {
+      const d = new Date(n.start)
+      if (!isNaN(d.getTime()) && d < earliest) earliest = d
+    }
+    if (n.end) {
+      const d = new Date(n.end)
+      if (!isNaN(d.getTime()) && d > latest) latest = d
+    }
     if (n.children) walk(n.children)
   })
   walk(wbs)
-  if (!minD || !maxD) return { start: fallbackStart, days: fallbackEnd.getDate() }
-  const start = new Date(minD.getFullYear(), minD.getMonth(), 1)
-  const end = new Date(maxD.getFullYear(), maxD.getMonth() + 1, 0)
+  const start = new Date(earliest.getFullYear(), earliest.getMonth(), 1)
+  const end = new Date(latest.getFullYear(), latest.getMonth() + 1, 0)
   const days = daysBetween(start, end) + 1
-  return { start, days: Math.max(28, Math.min(days, 186)) }
+  // Cap at ~2 years to avoid pathological widths
+  return { start, days: Math.max(28, Math.min(days, 730)) }
 }
 
 export function WBSPage({ wbs, setWbs, expanded, setExpanded, doneMap, setDoneMap }) {
   const [selected, setSelected] = useState(null);
   const [adding, setAdding] = useState(null);
   const [newTitle, setNewTitle] = useState("");
+  const [newStart, setNewStart] = useState("");
+  const [newEnd, setNewEnd] = useState("");
+  const [editing, setEditing] = useState(null);
+  const [editDraft, setEditDraft] = useState(null);
+  const dragRef = useRef(null);
+  const [, setDragVer] = useState(0);
+  const todayCellRef = useRef(null);
+  const ganttScrollRef = useRef(null);
+  const scrolledOnce = useRef(false);
 
   const flat = useMemo(() => flattenWBS(wbs, 0, expanded), [wbs, expanded]);
 
   const toggleExpand = (id) => setExpanded(e => ({ ...e, [id]: !e[id] }));
   const toggleDone = (id) => setDoneMap(d => ({ ...d, [id]: !d[id] }));
 
+  const openAdd = (parentId) => {
+    setAdding(parentId);
+    setEditing(null);
+    setEditDraft(null);
+    setNewTitle("");
+    const t = todayISO();
+    setNewStart(t);
+    setNewEnd(t);
+  };
+  const closeAdd = () => {
+    setAdding(null);
+    setNewTitle("");
+  };
   const addChild = (parentId) => {
-    if (!newTitle.trim()) { setAdding(null); return; }
-    const today = todayISO();
+    const title = newTitle.trim();
+    if (!title) { closeAdd(); return; }
+    const tISO = todayISO();
+    const start = newStart || tISO;
+    const end = newEnd && newEnd >= start ? newEnd : start;
     const newId = (typeof crypto !== 'undefined' && crypto.randomUUID)
       ? crypto.randomUUID()
       : `n${Date.now()}`;
-    const newNode = { id: newId, title: newTitle, parent: parentId, owner: "", start: today, end: today, status: "todo" };
+    const newNode = { id: newId, title, parent: parentId, owner: "", start, end, status: "todo" };
     const insert = (nodes) => nodes.map(n => {
       if (n.id === parentId) return { ...n, children: [...(n.children || []), newNode] };
       if (n.children) return { ...n, children: insert(n.children) };
       return n;
     });
-    if (parentId === null) setWbs([...wbs, newNode]);
+    if (parentId === null) setWbs([...wbs, { ...newNode, children: [] }]);
     else setWbs(insert(wbs));
     setExpanded(e => ({ ...e, [parentId]: true }));
-    setNewTitle("");
-    setAdding(null);
+    closeAdd();
   };
+
+  const openEdit = (node) => {
+    setEditing(node.id);
+    setAdding(null);
+    setEditDraft({
+      title: node.title || '',
+      owner: node.owner || '',
+      start: node.start || todayISO(),
+      end: node.end || todayISO(),
+      status: node.status || 'todo',
+    });
+  };
+  const cancelEdit = () => { setEditing(null); setEditDraft(null); };
+  const saveEdit = () => {
+    if (!editDraft || !editing) return;
+    const id = editing;
+    const draft = editDraft;
+    setWbs(prev => updateNodeInTree(prev, id, n => ({
+      ...n,
+      title: draft.title.trim() || n.title,
+      owner: draft.owner,
+      start: draft.start,
+      end: draft.end && draft.end >= draft.start ? draft.end : draft.start,
+      status: draft.status,
+    })));
+    cancelEdit();
+  };
+  const deleteNode = (node) => {
+    if (!confirm(`"${node.title}" 작업을 삭제할까요? 모든 하위 작업이 함께 삭제됩니다.`)) return;
+    setWbs(prev => removeNodeFromTree(prev, node.id));
+    if (selected === node.id) setSelected(null);
+    if (adding === node.id) closeAdd();
+    if (editing === node.id) cancelEdit();
+  };
+
+  const startDrag = useCallback((e, mode, node) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setSelected(node.id);
+    const startX = e.clientX;
+    dragRef.current = { id: node.id, mode, dayDelta: 0 };
+    setDragVer(v => v + 1);
+    const prevUserSelect = document.body.style.userSelect;
+    const prevCursor = document.body.style.cursor;
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = mode === 'move' ? 'grabbing' : 'ew-resize';
+
+    function onMove(ev) {
+      const dx = ev.clientX - startX;
+      const days = Math.round(dx / DAY_PX);
+      const cur = dragRef.current;
+      if (cur && cur.dayDelta !== days) {
+        dragRef.current = { ...cur, dayDelta: days };
+        setDragVer(v => v + 1);
+      }
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.userSelect = prevUserSelect;
+      document.body.style.cursor = prevCursor;
+      const cur = dragRef.current;
+      if (cur && cur.dayDelta !== 0) {
+        const { id, mode: m, dayDelta } = cur;
+        setWbs(prev => updateNodeInTree(prev, id, n => {
+          let s = n.start, ed = n.end;
+          if (m === 'move' || m === 'resize-start') s = addDaysISO(n.start, dayDelta);
+          if (m === 'move' || m === 'resize-end') ed = addDaysISO(n.end, dayDelta);
+          if (s && ed && s > ed) {
+            if (m === 'resize-start') s = ed;
+            else if (m === 'resize-end') ed = s;
+          }
+          return { ...n, start: s, end: ed };
+        }));
+      }
+      dragRef.current = null;
+      setDragVer(v => v + 1);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [setWbs]);
 
   const { start: ganttStart, days: ganttDays } = useMemo(() => computeGanttRange(wbs), [wbs])
   const days = useMemo(() => Array.from({ length: ganttDays }, (_, i) => {
@@ -436,6 +569,15 @@ export function WBSPage({ wbs, setWbs, expanded, setExpanded, doneMap, setDoneMa
     return a === b ? a : `${a} ~ ${b}`
   })()
 
+  // Auto-scroll Gantt to today on first render where today is visible.
+  useEffect(() => {
+    if (scrolledOnce.current) return
+    if (todayCellRef.current && ganttScrollRef.current) {
+      todayCellRef.current.scrollIntoView({ inline: 'center', block: 'nearest' })
+      scrolledOnce.current = true
+    }
+  })
+
   const projectCount = wbs.length
 
   return (
@@ -447,7 +589,7 @@ export function WBSPage({ wbs, setWbs, expanded, setExpanded, doneMap, setDoneMa
         </div>
         <div className="page-actions">
           <button className="btn"><IFilter size={14}/><span>Owner</span></button>
-          <button className="btn btn-primary" onClick={()=>{ setAdding("__root"); setNewTitle(""); }}>
+          <button className="btn btn-primary" onClick={() => openAdd("__root")}>
             <IPlus size={14}/><span>새 프로젝트</span>
           </button>
         </div>
@@ -459,7 +601,7 @@ export function WBSPage({ wbs, setWbs, expanded, setExpanded, doneMap, setDoneMa
           <div style={{ fontSize: 12.5, color: 'var(--fg-tertiary)', marginBottom: 14 }}>
             첫 프로젝트를 만들어 작업을 단계별로 분해해보세요.
           </div>
-          <button className="btn btn-primary" onClick={()=>{ setAdding("__root"); setNewTitle(""); }}>
+          <button className="btn btn-primary" onClick={() => openAdd("__root")}>
             <IPlus size={14}/><span>새 프로젝트</span>
           </button>
         </div>
@@ -468,28 +610,26 @@ export function WBSPage({ wbs, setWbs, expanded, setExpanded, doneMap, setDoneMa
       {(wbs.length > 0 || adding === "__root") && (
         <>
           {adding === "__root" && (
-            <div className="add-row" style={{ marginBottom: 12, maxWidth: 480 }}>
-              <input autoFocus placeholder="새 프로젝트..." value={newTitle}
+            <div className="task-form">
+              <input autoFocus placeholder="프로젝트 제목..." value={newTitle}
                      onChange={(e) => setNewTitle(e.target.value)}
-                     onKeyDown={(e) => {
-                       if (e.key === "Enter") {
-                         if (!newTitle.trim()) { setAdding(null); return; }
-                         const id = (typeof crypto !== 'undefined' && crypto.randomUUID)
-                           ? crypto.randomUUID()
-                           : `n${Date.now()}`;
-                         const today = todayISO();
-                         setWbs([...wbs, { id, title: newTitle, parent: null, owner: "", start: today, end: today, status: "todo", children: [] }]);
-                         setNewTitle(""); setAdding(null);
-                       }
-                       if (e.key === "Escape") setAdding(null);
-                     }}/>
-              <button className="btn" onClick={() => setAdding(null)}>취소</button>
+                     onKeyDown={(e) => { if (e.key === "Enter") addChild(null); if (e.key === "Escape") closeAdd(); }}/>
+              <div className="task-form-row">
+                <span className="task-form-label">기간</span>
+                <input type="date" value={newStart} onChange={(e) => setNewStart(e.target.value)} />
+                <span className="task-form-sep">—</span>
+                <input type="date" value={newEnd} onChange={(e) => setNewEnd(e.target.value)} />
+              </div>
+              <div className="task-form-actions">
+                <button className="btn" onClick={closeAdd}>취소</button>
+                <button className="btn btn-primary" onClick={() => addChild(null)}>추가</button>
+              </div>
             </div>
           )}
 
           {wbs.length > 0 && (
-            <div className="gantt">
-              <div className="gantt-grid" style={{ minWidth: Math.max(880, ganttDays * 28 + 280) }}>
+            <div className="gantt" ref={ganttScrollRef}>
+              <div className="gantt-grid" style={{ minWidth: Math.max(880, ganttDays * DAY_PX + 280) }}>
                 <div className="gantt-head">
                   <div className="label-th">{ganttHeadLabel}</div>
                   <div className="gantt-days" style={{gridTemplateColumns:`repeat(${ganttDays}, 1fr)`}}>
@@ -497,7 +637,9 @@ export function WBSPage({ wbs, setWbs, expanded, setExpanded, doneMap, setDoneMa
                       const dow = d.getDay();
                       const isToday = sameDay(d, today);
                       return (
-                        <div key={i} className={"gantt-day" + (isToday ? " today" : "") + (dow === 0 || dow === 6 ? " weekend" : "")}>
+                        <div key={i}
+                             ref={isToday ? todayCellRef : null}
+                             className={"gantt-day" + (isToday ? " today" : "") + (dow === 0 || dow === 6 ? " weekend" : "")}>
                           <span className="num">{d.getDate()}</span>
                           <span>{["일","월","화","수","목","금","토"][dow]}</span>
                         </div>
@@ -506,13 +648,26 @@ export function WBSPage({ wbs, setWbs, expanded, setExpanded, doneMap, setDoneMa
                   </div>
                 </div>
                 {ganttRows.map(node => {
-                  const start = dateToCol(node.start);
-                  const end = dateToCol(node.end);
+                  // Apply drag overlay (visual-only) before computing bar geometry
+                  const overlay = dragRef.current && dragRef.current.id === node.id ? dragRef.current : null
+                  let effStart = node.start, effEnd = node.end
+                  if (overlay && overlay.dayDelta !== 0) {
+                    if (overlay.mode === 'move' || overlay.mode === 'resize-start') effStart = addDaysISO(node.start, overlay.dayDelta)
+                    if (overlay.mode === 'move' || overlay.mode === 'resize-end') effEnd = addDaysISO(node.end, overlay.dayDelta)
+                    if (effStart && effEnd && effStart > effEnd) {
+                      if (overlay.mode === 'resize-start') effStart = effEnd
+                      else if (overlay.mode === 'resize-end') effEnd = effStart
+                    }
+                  }
+                  const start = dateToCol(effStart);
+                  const end = dateToCol(effEnd);
                   const span = Math.max(1, end - start + 1);
                   const pct = computeProgress(node, doneMap);
                   const klass = node.hasChildren ? "parent" : (pct === 100 ? "done" : "");
                   const isSelected = selected === node.id;
                   const checked = doneMap[node.id] || node.status === "done";
+                  const isEditing = editing === node.id;
+                  const isAddingHere = adding === node.id;
                   return (
                     <React.Fragment key={node.id}>
                       <div className="gantt-row" data-selected={isSelected}>
@@ -545,29 +700,89 @@ export function WBSPage({ wbs, setWbs, expanded, setExpanded, doneMap, setDoneMa
                             const isToday = sameDay(d, today);
                             return <div key={i} className={"gantt-cell" + (dow===0||dow===6?" weekend":"") + (isToday?" today":"")}/>;
                           })}
-                          <div className={"gantt-bar " + klass}
-                               style={{ left: `calc(${(start/ganttDays)*100}% + 2px)`, width: `calc(${(span/ganttDays)*100}% - 4px)` }}>
-                            {span > 3 && <span style={{opacity:.95}}>{node.title}</span>}
+                          <div className={"gantt-bar " + klass + (overlay ? " dragging" : "")}
+                               style={{ left: `calc(${(start/ganttDays)*100}% + 2px)`, width: `calc(${(span/ganttDays)*100}% - 4px)` }}
+                               onMouseDown={(e) => startDrag(e, 'move', node)}
+                               title="드래그: 이동 / 가장자리 드래그: 기간 조정">
+                            <span className="bar-handle bar-handle-l"
+                                  onMouseDown={(e) => startDrag(e, 'resize-start', node)}/>
+                            {span > 3 && <span className="bar-label">{node.title}</span>}
+                            <span className="bar-handle bar-handle-r"
+                                  onMouseDown={(e) => startDrag(e, 'resize-end', node)}/>
                           </div>
                         </div>
                       </div>
-                      {isSelected && (
+
+                      {isSelected && isEditing && editDraft && (
                         <div className="gantt-add-row-line"
                              style={{ paddingLeft: 22 + node.depth * 14 }}>
-                          {adding === node.id ? (
-                            <div className="add-row" style={{ margin: 0, flex: 1, maxWidth: 480 }}>
-                              <input autoFocus placeholder="새 하위 작업..." value={newTitle}
-                                     onChange={(e) => setNewTitle(e.target.value)}
-                                     onKeyDown={(e) => { if (e.key === "Enter") addChild(node.id); if (e.key === "Escape") setAdding(null); }}/>
-                              <button className="btn btn-primary" onClick={() => addChild(node.id)}>추가</button>
-                              <button className="btn" onClick={() => setAdding(null)}>취소</button>
+                          <div className="task-form" style={{ flex: 1, maxWidth: 560 }}>
+                            <input autoFocus placeholder="제목..." value={editDraft.title}
+                                   onChange={(e) => setEditDraft(d => ({ ...d, title: e.target.value }))}
+                                   onKeyDown={(e) => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") cancelEdit(); }}/>
+                            <input placeholder="담당자 (선택)" value={editDraft.owner}
+                                   onChange={(e) => setEditDraft(d => ({ ...d, owner: e.target.value }))}/>
+                            <div className="task-form-row">
+                              <span className="task-form-label">기간</span>
+                              <input type="date" value={editDraft.start}
+                                     onChange={(e) => setEditDraft(d => ({ ...d, start: e.target.value }))}/>
+                              <span className="task-form-sep">—</span>
+                              <input type="date" value={editDraft.end}
+                                     onChange={(e) => setEditDraft(d => ({ ...d, end: e.target.value }))}/>
                             </div>
-                          ) : (
-                            <button className="gantt-add-link"
-                                    onClick={() => { setAdding(node.id); setNewTitle(""); }}>
-                              <IPlus size={12}/> <span>하위 작업 추가</span>
-                            </button>
-                          )}
+                            <div className="task-form-row">
+                              <span className="task-form-label">상태</span>
+                              <select value={editDraft.status}
+                                      onChange={(e) => setEditDraft(d => ({ ...d, status: e.target.value }))}>
+                                <option value="todo">todo</option>
+                                <option value="doing">doing</option>
+                                <option value="done">done</option>
+                              </select>
+                            </div>
+                            <div className="task-form-actions">
+                              <button className="btn" onClick={cancelEdit}>취소</button>
+                              <button className="btn btn-primary" onClick={saveEdit}>저장</button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {isSelected && isAddingHere && (
+                        <div className="gantt-add-row-line"
+                             style={{ paddingLeft: 22 + node.depth * 14 }}>
+                          <div className="task-form" style={{ flex: 1, maxWidth: 560 }}>
+                            <input autoFocus placeholder="새 하위 작업..." value={newTitle}
+                                   onChange={(e) => setNewTitle(e.target.value)}
+                                   onKeyDown={(e) => { if (e.key === "Enter") addChild(node.id); if (e.key === "Escape") closeAdd(); }}/>
+                            <div className="task-form-row">
+                              <span className="task-form-label">기간</span>
+                              <input type="date" value={newStart} onChange={(e) => setNewStart(e.target.value)}/>
+                              <span className="task-form-sep">—</span>
+                              <input type="date" value={newEnd} onChange={(e) => setNewEnd(e.target.value)}/>
+                            </div>
+                            <div className="task-form-actions">
+                              <button className="btn" onClick={closeAdd}>취소</button>
+                              <button className="btn btn-primary" onClick={() => addChild(node.id)}>추가</button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {isSelected && !isEditing && !isAddingHere && (
+                        <div className="gantt-add-row-line"
+                             style={{ paddingLeft: 22 + node.depth * 14, gap: 4 }}>
+                          <button className="gantt-add-link"
+                                  onClick={() => openAdd(node.id)}>
+                            <IPlus size={12}/> <span>하위 작업 추가</span>
+                          </button>
+                          <button className="gantt-add-link"
+                                  onClick={() => openEdit(node)}>
+                            편집
+                          </button>
+                          <button className="gantt-add-link danger"
+                                  onClick={() => deleteNode(node)}>
+                            삭제
+                          </button>
                         </div>
                       )}
                     </React.Fragment>

@@ -630,6 +630,49 @@ button { font: inherit; color: inherit; }
   gap: 4px;
 }
 .gantt-add-link:hover { background: var(--bg-hover); }
+.gantt-add-link.danger { color: var(--red); }
+.gantt-add-link.danger:hover { background: var(--red-bg); }
+
+/* Task add/edit form (used in WBS Gantt rows + root project add) */
+.task-form {
+  display: flex; flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  margin: 0 0 12px;
+}
+.task-form > input {
+  border: 0; background: transparent; outline: none;
+  font: inherit; font-size: 13px;
+  padding: 4px 6px;
+  color: var(--fg);
+}
+.task-form > input::placeholder { color: var(--fg-tertiary); }
+.task-form-row {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px;
+}
+.task-form-label {
+  color: var(--fg-tertiary);
+  min-width: 36px;
+  font-weight: 500;
+}
+.task-form-sep { color: var(--fg-quaternary); padding: 0 2px; }
+.task-form-row input[type="date"],
+.task-form-row select {
+  background: var(--bg-input);
+  border: 0; border-radius: 6px;
+  padding: 4px 8px; font: inherit; font-size: 12.5px;
+  color: var(--fg); outline: none;
+  font-family: var(--font-mono);
+}
+.task-form-row select { font-family: inherit; }
+.task-form-actions {
+  display: flex; justify-content: flex-end;
+  gap: 6px; margin-top: 2px;
+}
 .gantt-track { position: relative; display: grid; }
 .gantt-cell { border-left: 0.5px solid var(--separator); }
 .gantt-cell.weekend { background: var(--bg-input); opacity: .5; }
@@ -647,10 +690,25 @@ button { font: inherit; color: inherit; }
   white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis;
   box-shadow: inset 0 1px 0 rgba(255,255,255,.2);
+  cursor: grab;
+  user-select: none;
 }
+.gantt-bar:active { cursor: grabbing; }
+.gantt-bar.dragging { box-shadow: 0 4px 12px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.3); opacity: .92; }
 .gantt-bar.parent { background: var(--purple); }
 .gantt-bar.done { background: var(--green); opacity: .85; }
 .gantt-bar.late { background: var(--red); }
+.gantt-bar .bar-label { pointer-events: none; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; opacity: .95; }
+.gantt-bar .bar-handle {
+  position: absolute;
+  top: -2px; bottom: -2px;
+  width: 8px;
+  cursor: ew-resize;
+  display: block;
+}
+.gantt-bar .bar-handle-l { left: -1px; }
+.gantt-bar .bar-handle-r { right: -1px; }
+.gantt-bar .bar-handle:hover { background: rgba(255,255,255,0.18); }
 
 /* Calendar */
 .calendar {
