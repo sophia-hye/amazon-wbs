@@ -510,7 +510,7 @@ button { font: inherit; color: inherit; }
 .gantt-grid { position: relative; min-width: 800px; }
 .gantt-head {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 400px 1fr;
   border-bottom: 0.5px solid var(--separator);
 }
 .gantt-head .label-th {
@@ -531,7 +531,7 @@ button { font: inherit; color: inherit; }
 .gantt-day.weekend { background: var(--bg-input); }
 .gantt-row {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 400px 1fr;
   border-bottom: 0.5px solid var(--separator);
   min-height: 38px;
   align-items: stretch;

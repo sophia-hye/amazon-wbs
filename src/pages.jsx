@@ -629,7 +629,7 @@ export function WBSPage({ wbs, setWbs, expanded, setExpanded, doneMap, setDoneMa
 
           {wbs.length > 0 && (
             <div className="gantt" ref={ganttScrollRef}>
-              <div className="gantt-grid" style={{ minWidth: Math.max(880, ganttDays * DAY_PX + 280) }}>
+              <div className="gantt-grid" style={{ minWidth: Math.max(1000, ganttDays * DAY_PX + 400) }}>
                 <div className="gantt-head">
                   <div className="label-th">{ganttHeadLabel}</div>
                   <div className="gantt-days" style={{gridTemplateColumns:`repeat(${ganttDays}, 1fr)`}}>
