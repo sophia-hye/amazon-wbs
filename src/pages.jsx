@@ -842,10 +842,12 @@ export function CalendarPage({ events, setEvents, wbs = [] }) {
   const daysInMonth = lastOfMonth.getDate();
   const today = todayDate();
 
-  // ── WBS auto-sync: every leaf task's date range becomes a derived event
-  //    on each day from start to end. Distinguished by source: 'wbs' + purple.
   const fmtKey = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-  const wbsEvents = useMemo(() => {
+
+  // ── WBS auto-sync: collect leaf tasks with normalized start/end so we can
+  //    render them as continuous multi-day bars (Gantt-style) inside the
+  //    calendar grid.
+  const wbsTasks = useMemo(() => {
     const out = [];
     const walk = (nodes) => nodes.forEach((n) => {
       const isLeaf = !n.children || n.children.length === 0;
@@ -853,39 +855,70 @@ export function CalendarPage({ events, setEvents, wbs = [] }) {
         if (!n.start) return;
         const startD = new Date(n.start);
         if (isNaN(startD.getTime())) return;
-        const endD = n.end ? new Date(n.end) : startD;
-        const cur = new Date(startD);
-        let safety = 0;
-        while (cur <= endD && safety < 366) {
-          out.push({
-            id: `wbs-${n.id}-${fmtKey(cur)}`,
-            date: fmtKey(cur),
-            title: n.title,
-            color: 'purple',
-            source: 'wbs',
-            linked: n.id,
-          });
-          cur.setDate(cur.getDate() + 1);
-          safety += 1;
-        }
-      } else if (n.children) {
-        walk(n.children);
-      }
+        const start = n.start;
+        const end = n.end && n.end >= n.start ? n.end : n.start;
+        out.push({ id: n.id, title: n.title, start, end });
+      } else if (n.children) walk(n.children);
     });
     walk(wbs);
+    // Earliest start first; longer tasks first as tiebreaker so they take
+    // lower tracks.
+    out.sort((a, b) => {
+      if (a.start !== b.start) return a.start < b.start ? -1 : 1;
+      const la = a.end, lb = b.end;
+      return la === lb ? 0 : la > lb ? -1 : 1;
+    });
     return out;
   }, [wbs]);
 
-  const wbsLeafCount = useMemo(() => {
-    let n = 0;
-    const walk = (nodes) => nodes.forEach((node) => {
-      const isLeaf = !node.children || node.children.length === 0;
-      if (isLeaf && node.start) n += 1;
-      else if (!isLeaf && node.children) walk(node.children);
-    });
-    walk(wbs);
-    return n;
-  }, [wbs]);
+  // Greedy track assignment: place each task on the lowest track whose last
+  // task ends strictly before this task starts.
+  const { trackOf, maxTrack } = useMemo(() => {
+    const map = {};
+    const trackEnd = []; // ISO end-date string per track
+    for (const t of wbsTasks) {
+      let placed = false;
+      for (let i = 0; i < trackEnd.length; i++) {
+        if (trackEnd[i] < t.start) {
+          trackEnd[i] = t.end;
+          map[t.id] = i;
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) {
+        trackEnd.push(t.end);
+        map[t.id] = trackEnd.length - 1;
+      }
+    }
+    return { trackOf: map, maxTrack: trackEnd.length - 1 };
+  }, [wbsTasks]);
+
+  // Pre-compute slot arrays per ISO date so cell rendering is cheap.
+  const slotsByDate = useMemo(() => {
+    const m = {};
+    if (maxTrack < 0) return m;
+    for (const t of wbsTasks) {
+      const startD = new Date(t.start);
+      const endD = new Date(t.end);
+      const cur = new Date(startD);
+      let safety = 0;
+      while (cur <= endD && safety < 400) {
+        const key = fmtKey(cur);
+        if (!m[key]) m[key] = new Array(maxTrack + 1).fill(null);
+        const isStart = key === t.start;
+        const isEnd = key === t.end;
+        const isSingle = t.start === t.end;
+        const pos = isSingle ? 'single' : isStart ? 'start' : isEnd ? 'end' : 'middle';
+        const isFirstOfWeek = cur.getDay() === 0; // Sunday — Calendar starts on Sunday
+        const showLabel = pos === 'start' || pos === 'single' || isFirstOfWeek;
+        m[key][trackOf[t.id]] = { id: t.id, title: t.title, pos, showLabel };
+        cur.setDate(cur.getDate() + 1);
+        safety += 1;
+      }
+    }
+    return m;
+  }, [wbsTasks, trackOf, maxTrack]);
 
   // Build 6-week grid
   const cells = [];
@@ -905,9 +938,9 @@ export function CalendarPage({ events, setEvents, wbs = [] }) {
 
   const eventsByDate = useMemo(() => {
     const m = {};
-    [...events, ...wbsEvents].forEach((e) => { (m[e.date] = m[e.date] || []).push(e); });
+    events.forEach((e) => { (m[e.date] = m[e.date] || []).push(e); });
     return m;
-  }, [events, wbsEvents]);
+  }, [events]);
 
   const addEvent = () => {
     if (!newEventTitle.trim()) { setNewEventDate(null); return; }
@@ -927,7 +960,7 @@ export function CalendarPage({ events, setEvents, wbs = [] }) {
           <h1 className="page-title">{monthName}</h1>
           <p className="page-subtitle">
             {events.length}개 일정
-            {wbsLeafCount > 0 && ` · WBS 작업 ${wbsLeafCount}개 자동 표시`}
+            {wbsTasks.length > 0 && ` · WBS 작업 ${wbsTasks.length}개 자동 표시`}
           </p>
         </div>
         <div className="page-actions">
@@ -953,6 +986,7 @@ export function CalendarPage({ events, setEvents, wbs = [] }) {
           {cells.map((c, i) => {
             const key = fmtKey(c.date);
             const dayEvents = eventsByDate[key] || [];
+            const slots = slotsByDate[key];
             const isToday = sameDay(c.date, today);
             const isSun = c.date.getDay() === 0;
             return (
@@ -960,6 +994,19 @@ export function CalendarPage({ events, setEvents, wbs = [] }) {
                    className={"cal-cell" + (c.other?" other":"") + (isToday?" today":"") + (isSun?" sun":"")}
                    onDoubleClick={() => { setNewEventDate(key); setNewEventTitle(""); }}>
                 <span className="cal-num">{c.date.getDate()}</span>
+                {/* WBS multi-day bars on track-aligned slots */}
+                {maxTrack >= 0 && Array.from({ length: maxTrack + 1 }).map((_, t) => {
+                  const slot = slots ? slots[t] : null;
+                  if (!slot) return <div key={`s-${t}`} className="cal-wbs-bar-placeholder" aria-hidden />;
+                  return (
+                    <div key={`s-${t}`}
+                         className={"cal-wbs-bar " + slot.pos}
+                         title={slot.title}>
+                      {slot.showLabel ? slot.title : ' '}
+                    </div>
+                  );
+                })}
+                {/* Manual events */}
                 {dayEvents.slice(0,3).map((e, j) => (
                   <div key={j} className={"cal-event" + (e.color==="blue"?"":` ${e.color}`)} title={e.title}>
                     {e.title}
