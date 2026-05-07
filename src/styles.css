@@ -537,6 +537,7 @@ button { font: inherit; color: inherit; }
   align-items: stretch;
 }
 .gantt-row:last-child { border-bottom: 0; }
+.gantt-row[data-selected="true"] .gantt-name { background: var(--accent-bg); }
 .gantt-name {
   padding: 0 10px;
   font-size: 13px;
@@ -545,8 +546,40 @@ button { font: inherit; color: inherit; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: default;
+  transition: background-color .12s;
 }
+.gantt-name:hover { background: var(--bg-hover); }
 .gantt-name.parent { font-weight: 500; }
+.gantt-chev {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 3px;
+  cursor: default;
+}
+.gantt-chev:hover { background: var(--bg-active); }
+
+.gantt-add-row-line {
+  display: flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-bottom: 0.5px dashed var(--border-strong);
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+.gantt-add-link {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: default;
+  padding: 4px 8px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.gantt-add-link:hover { background: var(--bg-hover); }
 .gantt-track { position: relative; display: grid; }
 .gantt-cell { border-left: 0.5px solid var(--separator); }
 .gantt-cell.weekend { background: var(--bg-input); opacity: .5; }

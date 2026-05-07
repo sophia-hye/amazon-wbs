@@ -563,25 +563,55 @@ export function WBSPage({ wbs, setWbs, expanded, setExpanded, doneMap, setDoneMa
                   const span = Math.max(1, end - start + 1);
                   const pct = computeProgress(node, doneMap);
                   const klass = node.hasChildren ? "parent" : (pct === 100 ? "done" : "");
+                  const isSelected = selected === node.id;
                   return (
-                    <div key={node.id} className="gantt-row">
-                      <div className={"gantt-name" + (node.hasChildren ? " parent" : "")}
-                           style={{ paddingLeft: 10 + node.depth * 14 }}>
-                        {node.hasChildren ? (expanded[node.id] ? <IChevD size={12} style={{color:"var(--fg-tertiary)"}}/> : <IChev size={12} style={{color:"var(--fg-tertiary)"}}/>) : <span style={{width:12,display:"inline-block"}}/>}
-                        <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{node.title}</span>
-                      </div>
-                      <div className="gantt-track" style={{gridTemplateColumns:`repeat(${ganttDays}, 1fr)`}}>
-                        {days.map((d,i) => {
-                          const dow = d.getDay();
-                          const isToday = sameDay(d, today);
-                          return <div key={i} className={"gantt-cell" + (dow===0||dow===6?" weekend":"") + (isToday?" today":"")}/>;
-                        })}
-                        <div className={"gantt-bar " + klass}
-                             style={{ left: `calc(${(start/ganttDays)*100}% + 2px)`, width: `calc(${(span/ganttDays)*100}% - 4px)` }}>
-                          {span > 3 && <span style={{opacity:.95}}>{node.title}</span>}
+                    <React.Fragment key={node.id}>
+                      <div className="gantt-row" data-selected={isSelected}>
+                        <div className={"gantt-name" + (node.hasChildren ? " parent" : "")}
+                             style={{ paddingLeft: 10 + node.depth * 14 }}
+                             onClick={() => setSelected(node.id)}>
+                          {node.hasChildren ? (
+                            <span className="gantt-chev"
+                                  onClick={(e) => { e.stopPropagation(); toggleExpand(node.id); }}>
+                              {expanded[node.id]
+                                ? <IChevD size={12} style={{color:"var(--fg-tertiary)"}}/>
+                                : <IChev size={12} style={{color:"var(--fg-tertiary)"}}/>}
+                            </span>
+                          ) : <span style={{width:12,display:"inline-block"}}/>}
+                          <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{node.title}</span>
+                        </div>
+                        <div className="gantt-track" style={{gridTemplateColumns:`repeat(${ganttDays}, 1fr)`}}>
+                          {days.map((d,i) => {
+                            const dow = d.getDay();
+                            const isToday = sameDay(d, today);
+                            return <div key={i} className={"gantt-cell" + (dow===0||dow===6?" weekend":"") + (isToday?" today":"")}/>;
+                          })}
+                          <div className={"gantt-bar " + klass}
+                               style={{ left: `calc(${(start/ganttDays)*100}% + 2px)`, width: `calc(${(span/ganttDays)*100}% - 4px)` }}>
+                            {span > 3 && <span style={{opacity:.95}}>{node.title}</span>}
+                          </div>
                         </div>
                       </div>
-                    </div>
+                      {isSelected && (
+                        <div className="gantt-add-row-line"
+                             style={{ paddingLeft: 22 + node.depth * 14 }}>
+                          {adding === node.id ? (
+                            <div className="add-row" style={{ margin: 0, flex: 1, maxWidth: 480 }}>
+                              <input autoFocus placeholder="새 하위 작업..." value={newTitle}
+                                     onChange={(e) => setNewTitle(e.target.value)}
+                                     onKeyDown={(e) => { if (e.key === "Enter") addChild(node.id); if (e.key === "Escape") setAdding(null); }}/>
+                              <button className="btn btn-primary" onClick={() => addChild(node.id)}>추가</button>
+                              <button className="btn" onClick={() => setAdding(null)}>취소</button>
+                            </div>
+                          ) : (
+                            <button className="gantt-add-link"
+                                    onClick={() => { setAdding(node.id); setNewTitle(""); }}>
+                              <IPlus size={12}/> <span>하위 작업 추가</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </React.Fragment>
                   );
                 })}
               </div>
