@@ -533,19 +533,17 @@ button { font: inherit; color: inherit; }
   display: grid;
   grid-template-columns: 280px 1fr;
   border-bottom: 0.5px solid var(--separator);
-  height: 38px;
+  min-height: 38px;
   align-items: stretch;
 }
 .gantt-row:last-child { border-bottom: 0; }
 .gantt-row[data-selected="true"] .gantt-name { background: var(--accent-bg); }
 .gantt-name {
-  padding: 0 10px;
+  padding: 6px 10px;
   font-size: 13px;
   color: var(--fg);
   display: flex; align-items: center; gap: 6px;
-  white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
   cursor: default;
   transition: background-color .12s;
 }
@@ -578,9 +576,10 @@ button { font: inherit; color: inherit; }
 }
 .gantt-name-text {
   flex: 1; min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
 }
 .gantt-name-text .sub {
   font-size: 11.5px;
