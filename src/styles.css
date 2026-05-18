@@ -1427,3 +1427,152 @@ button { font: inherit; color: inherit; }
   border-radius: 4px;
 }
 .env-warning-close:hover { background: rgba(255, 149, 0, 0.18); }
+
+/* ══════════════════════════════════════════════════════
+   Simulation Page
+══════════════════════════════════════════════════════ */
+.simulation-page { display: flex; flex-direction: column; gap: 0; }
+
+/* Fee settings panel */
+.sim-settings {
+  display: flex; flex-wrap: wrap; gap: 10px 24px;
+  padding: 14px 20px;
+  background: var(--bg-elev);
+  border: 0.5px solid var(--separator);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+}
+.sim-fee-item {
+  display: flex; flex-direction: column; gap: 4px;
+  min-width: 160px;
+}
+.sim-fee-label {
+  font-size: 11px; color: var(--fg-tertiary);
+  font-weight: 500;
+}
+.sim-fee-ctrl {
+  display: flex; align-items: center; gap: 6px;
+}
+.sim-fee-inp {
+  width: 80px; padding: 4px 8px;
+  background: var(--bg-input); border: 0.5px solid var(--separator);
+  border-radius: var(--radius-sm); font: inherit;
+  color: var(--fg); font-size: 13px;
+  outline: none;
+}
+.sim-fee-inp:focus { border-color: var(--accent); background: var(--bg-elev-2); }
+.sim-fee-unit { font-size: 12px; color: var(--fg-tertiary); }
+
+/* Table wrapper */
+.sim-scroll {
+  flex: 1; overflow: auto;
+  border: 0.5px solid var(--separator);
+  border-radius: var(--radius);
+}
+.sim-tbl {
+  border-collapse: collapse;
+  font-size: 12.5px;
+  width: 100%;
+  min-width: max-content;
+}
+
+/* Header row */
+.sim-tbl thead tr {
+  position: sticky; top: 0; z-index: 3;
+  background: var(--bg-elev);
+}
+.sim-lbl-th {
+  text-align: left; padding: 8px 14px;
+  width: 220px; min-width: 220px;
+  font-size: 11.5px; font-weight: 600;
+  color: var(--fg-secondary);
+  border-right: 0.5px solid var(--separator);
+  border-bottom: 0.5px solid var(--border-strong);
+  position: sticky; left: 0; z-index: 4;
+  background: var(--bg-elev);
+}
+.sim-mo-th {
+  text-align: right; padding: 8px 12px;
+  min-width: 110px;
+  font-size: 11.5px; font-weight: 600;
+  color: var(--fg-secondary);
+  border-bottom: 0.5px solid var(--border-strong);
+  white-space: nowrap;
+}
+
+/* Section header rows */
+.sim-section-row td {
+  padding: 6px 14px;
+  font-size: 10.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--fg-tertiary);
+  background: var(--bg-elev);
+  border-top: 0.5px solid var(--separator);
+  border-bottom: 0.5px solid var(--separator);
+  position: sticky; left: 0;
+}
+
+/* Data rows */
+.sim-tbl tbody tr:hover td { background: var(--bg-hover); }
+.sim-tbl tbody tr:hover .sim-lbl { background: var(--bg-hover); }
+
+/* Label cell (sticky left) */
+.sim-lbl {
+  padding: 6px 14px;
+  color: var(--fg-secondary); font-size: 12.5px;
+  border-right: 0.5px solid var(--separator);
+  white-space: nowrap;
+  position: sticky; left: 0; z-index: 2;
+  background: var(--bg);
+}
+.sim-bold { font-weight: 600; color: var(--fg); }
+.sim-cost-lbl { color: var(--fg-tertiary); }
+
+/* Input rows */
+.sim-input-row .sim-lbl { font-weight: 500; color: var(--fg); }
+.sim-in {
+  padding: 3px 6px;
+  background: var(--accent-bg);
+}
+.sim-input-row td { background: var(--accent-bg); }
+.sim-input-row:hover td { background: rgba(0,122,255,0.08) !important; }
+.sim-in-wrap {
+  display: inline-flex; align-items: center; gap: 2px;
+}
+.sim-pre, .sim-suf {
+  font-size: 11px; color: var(--fg-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.sim-inp {
+  width: 68px; padding: 3px 5px;
+  background: var(--bg-elev-2); border: 0.5px solid var(--separator);
+  border-radius: 4px; font: inherit;
+  font-size: 12px; color: var(--fg);
+  text-align: right; outline: none;
+  -moz-appearance: textfield;
+}
+.sim-inp::-webkit-inner-spin-button,
+.sim-inp::-webkit-outer-spin-button { -webkit-appearance: none; }
+.sim-inp:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-bg); }
+
+/* Value cells */
+.sim-val {
+  padding: 6px 12px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+  color: var(--fg-secondary);
+  white-space: nowrap;
+}
+.sim-val.sim-bold { font-weight: 600; color: var(--fg); }
+.sim-val.sim-cost { color: var(--fg-tertiary); }
+.sim-val.sim-pos  { color: var(--green); }
+.sim-val.sim-neg  { color: var(--red); }
+
+/* Zebra stripe for readability */
+.sim-tbl tbody tr:nth-child(even):not(.sim-section-row):not(.sim-input-row) td {
+  background: rgba(0,0,0,0.015);
+}
+[data-theme="dark"] .sim-tbl tbody tr:nth-child(even):not(.sim-section-row):not(.sim-input-row) td {
+  background: rgba(255,255,255,0.02);
+}

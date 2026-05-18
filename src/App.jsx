@@ -1,9 +1,10 @@
 import {
-  IDashboard, IWBS, ICalendar, ILog, IWeek, ISKU, IPPC, ISales, ITarget,
+  IDashboard, IWBS, ICalendar, ILog, IWeek, ISKU, IPPC, ISales, ITarget, ISimulation,
   ISidebar, ISearch, ISun, IMoon, IBell,
 } from './icons.jsx'
 import { DashboardPage, WBSPage, CalendarPage, DailyLogPage, DailySalesPage } from './pages.jsx'
 import { SKUPage, PPCPage, TargetingPage } from './sku-ppc.jsx'
+import { SimulationPage } from './simulation.jsx'
 import {
   TweaksPanel, TweakSection, TweakToggle, TweakColor, TweakRadio, TweakSlider,
   useTweaks,
@@ -33,10 +34,11 @@ const NAV_DEFS = [
   { id: 'weekly',    label: 'Weekly Log', icon: IWeek },
 ]
 const NAV2_DEFS = [
-  { id: 'sku',        label: 'SKUs',        icon: ISKU    },
-  { id: 'ppc',        label: 'PPC Ads',     icon: IPPC    },
-  { id: 'daily-sales',label: 'Daily Sales', icon: ISales  },
-  { id: 'targeting',  label: 'Targeting',   icon: ITarget },
+  { id: 'sku',        label: 'SKUs',        icon: ISKU       },
+  { id: 'ppc',        label: 'PPC Ads',     icon: IPPC       },
+  { id: 'daily-sales',label: 'Daily Sales', icon: ISales     },
+  { id: 'targeting',  label: 'Targeting',   icon: ITarget    },
+  { id: 'simulation', label: 'Simulation',  icon: ISimulation},
 ]
 
 // ---- Field mappers (module-level → stable references) ----
@@ -288,6 +290,7 @@ export default function App() {
     'daily-sales': <DailySalesPage skus={skus} dailySales={dailySales} setDailySales={setDailySales} />,
     targeting:     <TargetingPage skus={skus} keywords={keywords} setKeywords={setKeywords}
                                   targetingAsins={targetingAsins} setTargetingAsins={setTargetingAsins} />,
+    simulation:    <SimulationPage />,
   }[tab]
 
   const crumb = [...NAV, ...NAV2].find((n) => n.id === tab)?.label || ''
