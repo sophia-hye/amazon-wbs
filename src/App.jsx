@@ -42,23 +42,21 @@ const logToRow = (l) => ({
   id: l.id,
   date: l.date,
   title: l.title || '',
-  weather: l.weather ?? null,
-  mood: l.mood ?? null,
   body: l.body || '',
+  issues: l.issues || '',
+  next_actions: l.next_actions || '',
   tags: l.tags || [],
   linked_task_ids: l.linked || [],
-  metrics: l.metrics || { sales: 0, orders: 0, acos: 0 },
 })
 const logFromRow = (r) => ({
   id: r.id,
   date: r.date,
   title: r.title || '',
-  weather: r.weather,
-  mood: r.mood,
   body: r.body || '',
+  issues: r.issues || '',
+  next_actions: r.next_actions || '',
   tags: r.tags || [],
   linked: r.linked_task_ids || [],
-  metrics: r.metrics || { sales: 0, orders: 0, acos: 0 },
 })
 
 const eventToRow = (e) => ({

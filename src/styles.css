@@ -908,13 +908,18 @@ button { font: inherit; color: inherit; }
 .log-tag-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .log-body {
   border: 0; background: transparent; outline: none;
-  width: 100%; flex: 1; resize: none;
+  width: 100%; resize: none;
   font: inherit;
   font-size: calc(14.5px * var(--type-scale));
   line-height: 1.7; color: var(--fg);
-  min-height: 200px;
+  min-height: 90px;
 }
 .log-body::placeholder { color: var(--fg-quaternary); }
+.log-section { display: flex; flex-direction: column; gap: 4px; }
+.log-section-label {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--fg-tertiary);
+}
 
 .linked-list { display: flex; flex-direction: column; gap: 4px; padding: 6px 0; }
 .linked-item {

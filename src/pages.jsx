@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import {
   IFilter, IPlus, IChev, IChevD, IChevL, IChevR, ICheck,
-  IDollar, ICart, ITrend,
+  IDollar, ICart, ITrend, ILog,
 } from './icons.jsx'
 import { todayISO } from './usePersisted.js'
 
@@ -1075,7 +1075,7 @@ export function DailyLogPage({ logs, setLogs, wbs, doneMap, setDoneMap, wraps, s
     const id = (typeof crypto !== 'undefined' && crypto.randomUUID)
       ? crypto.randomUUID()
       : `l${Date.now()}`;
-    const fresh = { id, date: today, title: "", weather: "맑음", mood: "보통", body: "", tags: [], linked: [], metrics: { sales: 0, orders: 0, acos: 0 } };
+    const fresh = { id, date: today, title: "", body: "", issues: "", next_actions: "", tags: [], linked: [] };
     setLogs([fresh, ...logs]);
     setSelectedId(id);
   };
@@ -1089,13 +1089,8 @@ export function DailyLogPage({ logs, setLogs, wbs, doneMap, setDoneMap, wraps, s
   const wrap = wraps[weekKey] || { highlights: "", learnings: "", nextWeek: "", aiGenerated: false };
   const updateWrap = (patch) => setWraps({ ...wraps, [weekKey]: { ...wrap, ...patch } });
 
-  const weekMetrics = weekLogs.reduce((acc, l) => ({
-    sales: acc.sales + (l.metrics?.sales || 0),
-    orders: acc.orders + (l.metrics?.orders || 0),
-    acos: acc.acos + (l.metrics?.acos || 0),
-    n: acc.n + (l.metrics?.acos ? 1 : 0),
-  }), { sales: 0, orders: 0, acos: 0, n: 0 });
-  const avgAcos = weekMetrics.n ? (weekMetrics.acos / weekMetrics.n) : 0;
+  const issueLogCount = weekLogs.filter(l => l.issues && l.issues.trim()).length;
+  const nextActionLogCount = weekLogs.filter(l => l.next_actions && l.next_actions.trim()).length;
 
   const allLinked = [...new Set(weekLogs.flatMap(l => l.linked || []))];
   const completedThisWeek = allLinked.map(id => findInWBS(wbs, id)).filter(Boolean)
@@ -1106,14 +1101,13 @@ export function DailyLogPage({ logs, setLogs, wbs, doneMap, setDoneMap, wraps, s
 
   const generateAI = async () => {
     updateWrap({ aiGenerated: "loading" });
-    const prompt = `다음은 한 주간의 Amazon 운영 일지입니다. 한국어로 주간 회고를 작성해주세요.
-
-주간 매출: $${weekMetrics.sales.toLocaleString()}
-주간 주문: ${weekMetrics.orders}건
-평균 ACoS: ${avgAcos.toFixed(1)}%
+    const prompt = `다음은 한 주간의 Amazon 셀러 업무 일지입니다. 한국어로 주간 회고를 작성해주세요.
 
 일지 내용:
-${weekLogs.map(l => `[${l.date}] ${l.title}\n${l.body}`).join("\n\n")}
+${weekLogs.map(l => `[${l.date}] ${l.title}
+- 오늘 한 일: ${l.body || '(없음)'}
+- 이슈/메모: ${l.issues || '(없음)'}
+- 다음 액션: ${l.next_actions || '(없음)'}`).join("\n\n")}
 
 다음 형식의 JSON으로 답해주세요 (코드블록 없이 JSON만):
 {"highlights":"이번 주 주요 성과를 3-4 bullet point로(• 로 시작)","learnings":"배운 점/인사이트","nextWeek":"다음주 우선순위 액션 아이템(• 로 시작)"}`;
@@ -1157,24 +1151,24 @@ ${weekLogs.map(l => `[${l.date}] ${l.title}\n${l.body}`).join("\n\n")}
 
         <div className="kpi-grid" style={{gridTemplateColumns:"repeat(4, 1fr)"}}>
           <div className="kpi">
-            <div className="kpi-label"><span className="ic"><IDollar size={14}/></span><span>주간 매출</span></div>
-            <div className="kpi-value">${weekMetrics.sales.toLocaleString()}</div>
-            <div className="kpi-meta"><span>{weekLogs.length}일 합계</span></div>
+            <div className="kpi-label"><span className="ic"><ILog size={14}/></span><span>작성한 일지</span></div>
+            <div className="kpi-value">{weekLogs.length}<span style={{fontSize:18,color:"var(--fg-tertiary)",fontWeight:500}}>일</span></div>
+            <div className="kpi-meta"><span>이번 주 기록</span></div>
           </div>
           <div className="kpi">
-            <div className="kpi-label"><span className="ic" style={{background:"rgba(175,82,222,.12)",color:"var(--purple)"}}><ICart size={14}/></span><span>주간 주문</span></div>
-            <div className="kpi-value">{weekMetrics.orders}</div>
-            <div className="kpi-meta"><span>일평균 {weekLogs.length ? Math.round(weekMetrics.orders/weekLogs.length) : 0}건</span></div>
-          </div>
-          <div className="kpi">
-            <div className="kpi-label"><span className="ic" style={{background:"rgba(255,149,0,.12)",color:"var(--orange)"}}><ITrend size={14}/></span><span>평균 ACoS</span></div>
-            <div className="kpi-value">{avgAcos.toFixed(1)}%</div>
-            <div className="kpi-meta"><span>{weekMetrics.n}일 측정</span></div>
-          </div>
-          <div className="kpi">
-            <div className="kpi-label"><span className="ic" style={{background:"rgba(52,199,89,.12)",color:"var(--green)"}}><ICheck size={14}/></span><span>완료한 작업</span></div>
+            <div className="kpi-label"><span className="ic" style={{background:"rgba(52,199,89,.12)",color:"var(--green)"}}><ICheck size={14}/></span><span>완료 작업</span></div>
             <div className="kpi-value">{completedThisWeek.length}<span style={{fontSize:18,color:"var(--fg-tertiary)",fontWeight:500}}> / {allLinked.length}</span></div>
             <div className="kpi-meta"><span>WBS 연결 기준</span></div>
+          </div>
+          <div className="kpi">
+            <div className="kpi-label"><span className="ic" style={{background:"rgba(255,149,0,.12)",color:"var(--orange)"}}><ITrend size={14}/></span><span>이슈 기록</span></div>
+            <div className="kpi-value">{issueLogCount}<span style={{fontSize:18,color:"var(--fg-tertiary)",fontWeight:500}}>일</span></div>
+            <div className="kpi-meta"><span>이슈/메모 작성일</span></div>
+          </div>
+          <div className="kpi">
+            <div className="kpi-label"><span className="ic" style={{background:"rgba(175,82,222,.12)",color:"var(--purple)"}}><ICart size={14}/></span><span>액션 등록</span></div>
+            <div className="kpi-value">{nextActionLogCount}<span style={{fontSize:18,color:"var(--fg-tertiary)",fontWeight:500}}>일</span></div>
+            <div className="kpi-meta"><span>다음 액션 작성일</span></div>
           </div>
         </div>
 
@@ -1220,6 +1214,8 @@ ${weekLogs.map(l => `[${l.date}] ${l.title}\n${l.body}`).join("\n\n")}
                   <div key={l.id} style={{padding:"8px 10px",borderRadius:8,background:"var(--bg)",border:"0.5px solid var(--border)"}}>
                     <div style={{fontSize:11.5,color:"var(--fg-tertiary)",fontVariantNumeric:"tabular-nums"}}>{fmtDate(l.date)} · {["일","월","화","수","목","금","토"][new Date(l.date).getDay()]}</div>
                     <div style={{fontSize:13,fontWeight:500,marginTop:1}}>{l.title || "제목 없음"}</div>
+                    {l.issues && <div style={{fontSize:11.5,color:"var(--orange)",marginTop:2}}>⚠ {l.issues.slice(0,40)}{l.issues.length>40?"…":""}</div>}
+                    {l.next_actions && <div style={{fontSize:11.5,color:"var(--fg-tertiary)",marginTop:1}}>→ {l.next_actions.slice(0,40)}{l.next_actions.length>40?"…":""}</div>}
                   </div>
                 ))}
               </div>
@@ -1319,49 +1315,32 @@ ${weekLogs.map(l => `[${l.date}] ${l.title}\n${l.body}`).join("\n\n")}
           <input className="log-title-input" placeholder="오늘의 제목..." value={sel.title}
                  onChange={(e)=>update({title: e.target.value})}/>
 
-          <div className="log-meta-row">
-            <div className="log-meta">
-              <span className="log-meta-key">기상</span>
-              <select className="input" style={{width:90}} value={sel.weather}
-                      onChange={(e)=>update({weather: e.target.value})}>
-                <option>맑음</option><option>흐림</option><option>비</option><option>눈</option>
-              </select>
-            </div>
-            <div className="log-meta">
-              <span className="log-meta-key">컨디션</span>
-              <select className="input" style={{width:90}} value={sel.mood}
-                      onChange={(e)=>update({mood: e.target.value})}>
-                <option>집중</option><option>보통</option><option>피곤</option><option>기쁨</option>
-              </select>
-            </div>
-            <div className="log-meta" style={{flex:1,minWidth:0}}>
-              <span className="log-meta-key">태그</span>
-              <div className="log-tag-row">
-                {(sel.tags || []).map((t,i) => <span key={i} className="pill blue">{t}</span>)}
+          {(sel.tags || []).length > 0 && (
+            <div className="log-meta-row">
+              <div className="log-meta" style={{flex:1,minWidth:0}}>
+                <span className="log-meta-key">태그</span>
+                <div className="log-tag-row">
+                  {(sel.tags || []).map((t,i) => <span key={i} className="pill blue">{t}</span>)}
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
-          <div style={{display:"flex",gap:24,fontSize:12.5,color:"var(--fg-secondary)",paddingBottom:8,borderBottom:"0.5px solid var(--separator)",flexWrap:"wrap"}}>
-            <div>
-              <span style={{color:"var(--fg-tertiary)"}}>매출 $</span>
-              <input className="input" type="number" style={{width:90,display:"inline-block",marginLeft:4}} value={sel.metrics?.sales || 0}
-                     onChange={(e)=>update({metrics: {...sel.metrics, sales: parseFloat(e.target.value) || 0}})}/>
-            </div>
-            <div>
-              <span style={{color:"var(--fg-tertiary)"}}>주문</span>
-              <input className="input" type="number" style={{width:80,display:"inline-block",marginLeft:4}} value={sel.metrics?.orders || 0}
-                     onChange={(e)=>update({metrics: {...sel.metrics, orders: parseInt(e.target.value) || 0}})}/>
-            </div>
-            <div>
-              <span style={{color:"var(--fg-tertiary)"}}>ACoS %</span>
-              <input className="input" type="number" step="0.1" style={{width:80,display:"inline-block",marginLeft:4}} value={sel.metrics?.acos || 0}
-                     onChange={(e)=>update({metrics: {...sel.metrics, acos: parseFloat(e.target.value) || 0}})}/>
-            </div>
+          <div className="log-section">
+            <div className="log-section-label">오늘 한 일</div>
+            <textarea className="log-body" placeholder="오늘 진행한 업무를 기록하세요." value={sel.body || ''}
+                      onChange={(e)=>update({body: e.target.value})}/>
           </div>
-
-          <textarea className="log-body" placeholder="오늘 어떤 일이 있었나요?" value={sel.body}
-                    onChange={(e)=>update({body: e.target.value})}/>
+          <div className="log-section">
+            <div className="log-section-label">이슈 / 메모</div>
+            <textarea className="log-body" placeholder="문제점, 특이사항, 확인이 필요한 것..." value={sel.issues || ''}
+                      onChange={(e)=>update({issues: e.target.value})}/>
+          </div>
+          <div className="log-section">
+            <div className="log-section-label">다음 액션</div>
+            <textarea className="log-body" placeholder="내일 또는 다음에 처리할 업무..." value={sel.next_actions || ''}
+                      onChange={(e)=>update({next_actions: e.target.value})}/>
+          </div>
 
           {linkedTasks.length > 0 && (
             <div>
