@@ -2,31 +2,34 @@ import { useState, useMemo } from 'react'
 
 const MONTHS = ['5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월']
 
-// Per-month editable inputs only (5 fields)
+// Per-month editable inputs
+// paidRatio: 유료광고 매출비율 (%) — primary driver; paidUnits is derived
 const INITIAL_INPUTS = [
-  { aov: 14.99, targetUnits: 150,  paidUnits: 128,  acos: 120, opex: 2200 },
-  { aov: 14.99, targetUnits: 500,  paidUnits: 400,  acos: 110, opex: 700  },
-  { aov: 14.99, targetUnits: 650,  paidUnits: 488,  acos: 95,  opex: 700  },
-  { aov: 16.99, targetUnits: 700,  paidUnits: 490,  acos: 80,  opex: 700  },
-  { aov: 17.99, targetUnits: 750,  paidUnits: 488,  acos: 75,  opex: 700  },
-  { aov: 15.99, targetUnits: 950,  paidUnits: 570,  acos: 70,  opex: 700  },
-  { aov: 13.99, targetUnits: 1100, paidUnits: 605,  acos: 65,  opex: 700  },
-  { aov: 14.99, targetUnits: 1250, paidUnits: 625,  acos: 60,  opex: 700  },
+  { aov: 14.99, targetUnits: 150,  paidRatio: 85, acos: 120, opex: 2200 },
+  { aov: 14.99, targetUnits: 500,  paidRatio: 80, acos: 110, opex: 700  },
+  { aov: 14.99, targetUnits: 650,  paidRatio: 75, acos: 95,  opex: 700  },
+  { aov: 16.99, targetUnits: 700,  paidRatio: 70, acos: 80,  opex: 700  },
+  { aov: 17.99, targetUnits: 750,  paidRatio: 65, acos: 75,  opex: 700  },
+  { aov: 15.99, targetUnits: 950,  paidRatio: 60, acos: 70,  opex: 700  },
+  { aov: 13.99, targetUnits: 1100, paidRatio: 55, acos: 65,  opex: 700  },
+  { aov: 14.99, targetUnits: 1250, paidRatio: 50, acos: 60,  opex: 700  },
 ]
 
 // Unit rates & fee parameters (global settings)
+// logistics / tariff / inboundPlacementFee are all per unit SOLD
+// (amortised over sold units, same as spreadsheet formula)
 const DEFAULT_RATES = {
-  inboundRatio:         115,   // % of target sales → FBA 입고 수량
-  commissionRate:        20,   // % Amazon Jewelry Referral Fee
-  refundRate:             4,   // % of revenue
-  fbaFee:              3.81,   // $/unit sold — FBA Service Commission
-  fbaStorageFee:       0.004,  // $/unit/month (end inventory)
-  professionalPlan:      40,   // $/month
-  inboundPlacementFee: 0.40,   // $/unit inbound
-  logistics:           0.48,   // $/unit inbound (CN-US 직수입)
-  tariff:              0.27,   // $/unit inbound
-  cogs:                2.10,   // $/unit sold
-  packaging:           0.35,   // $/unit sold (패키징/브랜딩/Prep)
+  inboundRatio:         115,    // % of target sales → FBA 입고 수량
+  commissionRate:        20,    // % Amazon Jewelry Referral Fee
+  refundRate:             4,    // % of revenue
+  fbaFee:              3.81,    // $/unit sold — FBA Service Commission
+  fbaStorageFee:       0.004,   // $/unit/month (end inventory)
+  professionalPlan:      40,    // $/month
+  inboundPlacementFee:  0.46,   // $/unit sold (FBA inbound placement)
+  logistics:            0.55,   // $/unit sold (CN-US 직수입 물류비)
+  tariff:               0.315,  // $/unit sold (수입관세)
+  cogs:                 2.10,   // $/unit sold
+  packaging:            0.35,   // $/unit sold (패키징/브랜딩/Prep)
 }
 
 function calcAll(inputs, rates) {
@@ -44,32 +47,35 @@ function calcAll(inputs, rates) {
     const targetRevenue = m.aov * m.targetUnits
 
     // ── 유료 매출
-    const paidRatio   = m.targetUnits > 0 ? m.paidUnits / m.targetUnits : 0
-    const paidRevenue = m.aov * m.paidUnits
-    const adSpend     = paidRevenue * (m.acos / 100)
+    // paidRevenue = targetRevenue × paidRatio% (matches sheet formula)
+    const paidRatioDec = m.paidRatio / 100
+    const paidRevenue  = targetRevenue * paidRatioDec
+    const paidUnits    = Math.round(m.targetUnits * paidRatioDec)
+    const adSpend      = paidRevenue * (m.acos / 100)
 
     // ── 오가닉 매출
-    const organicUnits   = Math.max(0, m.targetUnits - m.paidUnits)
-    const organicRatio   = m.targetUnits > 0 ? organicUnits / m.targetUnits : 0
-    const organicRevenue = m.aov * organicUnits
+    // organicRevenue = targetRevenue × (1 - paidRatio%) — same as sheet
+    const organicRatioDec = 1 - paidRatioDec
+    const organicUnits    = m.targetUnits - paidUnits
+    const organicRevenue  = targetRevenue * organicRatioDec
 
     // ── 수수료
-    const refund      = targetRevenue * refRate
-    const commission  = targetRevenue * commRate
-    const fbaService  = m.targetUnits * rates.fbaFee
-    const endStock    = prevEndStock + fbqty - m.targetUnits
+    const refund       = targetRevenue * refRate
+    const commission   = targetRevenue * commRate
+    const fbaService   = m.targetUnits * rates.fbaFee
+    const endStock     = prevEndStock + fbqty - m.targetUnits
     const endInventory = Math.max(0, endStock)
-    const storage     = endInventory * rates.fbaStorageFee
-    const profPlan    = rates.professionalPlan
+    const storage      = endInventory * rates.fbaStorageFee
+    const profPlan     = rates.professionalPlan
 
-    // ── 유통/물류 (inbound 수량 기준)
-    const inboundFee    = fbqty * rates.inboundPlacementFee
-    const logisticsCost = fbqty * rates.logistics
+    // ── 유통/물류 — per unit SOLD (amortised, matches spreadsheet)
+    const inboundFee    = m.targetUnits * rates.inboundPlacementFee
+    const logisticsCost = m.targetUnits * rates.logistics
 
-    // ── 통관비 (inbound 수량 기준)
-    const tariffCost = fbqty * rates.tariff
+    // ── 통관비 — per unit sold
+    const tariffCost = m.targetUnits * rates.tariff
 
-    // ── 제조원가 (판매량 기준)
+    // ── 제조원가
     const cogsCost = m.targetUnits * rates.cogs
 
     // ── 판관비
@@ -87,19 +93,25 @@ function calcAll(inputs, rates) {
     cumProfit += operatingProfit
 
     // ── 재고
-    const inventoryCash = endInventory * rates.cogs
+    // inventoryCash: 입고 기준 — fbqty × total landed cost per inbound unit
+    const landedCostPerInbound = rates.cogs
+                                + rates.logistics    // per sold → same amortised base
+                                + rates.tariff
+                                + rates.inboundPlacementFee
+                                + rates.packaging
+    const inventoryCash = fbqty * landedCostPerInbound
 
     // ── 단위경제 (광고·고정비 제외)
-    const contributionMargin  = m.aov * (1 - refRate - commRate)
-                               - rates.fbaFee - rates.cogs - rates.packaging
+    const contributionMargin   = m.aov * (1 - refRate - commRate)
+                                 - rates.fbaFee - rates.cogs - rates.packaging
     const adSpendPerUnit       = m.targetUnits > 0 ? adSpend / m.targetUnits : 0
     const contributionAfterAd  = contributionMargin - adSpendPerUnit
     const breakEvenAcos        = m.aov > 0 ? Math.max(0, contributionMargin) / m.aov : 0
 
     results.push({
       fbqty, targetRevenue,
-      paidRatio, paidRevenue, adSpend,
-      organicUnits, organicRatio, organicRevenue,
+      paidRatioDec, paidRevenue, paidUnits, adSpend,
+      organicRatioDec, organicUnits, organicRevenue,
       refund, commission, fbaService, storage, profPlan,
       inboundFee, logisticsCost,
       tariffCost,
@@ -183,8 +195,8 @@ function FeeInput({ label, value, onChange, unit, step = 'any' }) {
 }
 
 export function SimulationPage() {
-  const [inputs, setInputs]         = useState(INITIAL_INPUTS)
-  const [rates, setRates]           = useState(DEFAULT_RATES)
+  const [inputs, setInputs]             = useState(INITIAL_INPUTS)
+  const [rates, setRates]               = useState(DEFAULT_RATES)
   const [showSettings, setShowSettings] = useState(false)
 
   const calc = useMemo(() => calcAll(inputs, rates), [inputs, rates])
@@ -202,7 +214,6 @@ export function SimulationPage() {
     setRates((prev) => ({ ...prev, [field]: v }))
   }
 
-  // shorthand for InputCell props
   const ic = (idx, field, opts = {}) => ({ idx, field, inputs, onChange: handleCell, ...opts })
 
   return (
@@ -223,27 +234,27 @@ export function SimulationPage() {
       {/* ── Rate settings panel */}
       {showSettings && (
         <div className="sim-settings">
-          <FeeInput label="FBA 입고 비율" value={rates.inboundRatio} step="1"
-            onChange={(v) => handleRate('inboundRatio', v)} unit="% of 목표판매량" />
-          <FeeInput label="Amazon 판매 수수료율" value={rates.commissionRate} step="0.1"
+          <FeeInput label="FBA 입고 비율 (목표판매량 대비)" value={rates.inboundRatio} step="1"
+            onChange={(v) => handleRate('inboundRatio', v)} unit="%" />
+          <FeeInput label="Amazon 판매 수수료율 (Jewelry)" value={rates.commissionRate} step="0.1"
             onChange={(v) => handleRate('commissionRate', v)} unit="%" />
           <FeeInput label="반품 / 환불 충당율" value={rates.refundRate} step="0.1"
             onChange={(v) => handleRate('refundRate', v)} unit="%" />
-          <FeeInput label="FBA Service Commission / unit" value={rates.fbaFee} step="0.01"
+          <FeeInput label="FBA Service Commission / unit 판매" value={rates.fbaFee} step="0.01"
             onChange={(v) => handleRate('fbaFee', v)} unit="$" />
           <FeeInput label="FBA 보관료 / unit / 월" value={rates.fbaStorageFee} step="0.001"
             onChange={(v) => handleRate('fbaStorageFee', v)} unit="$" />
           <FeeInput label="Professional Selling Plan" value={rates.professionalPlan} step="1"
             onChange={(v) => handleRate('professionalPlan', v)} unit="$/월" />
-          <FeeInput label="FBA 인바운드 배치 수수료 / unit" value={rates.inboundPlacementFee} step="0.01"
-            onChange={(v) => handleRate('inboundPlacementFee', v)} unit="$ (입고 기준)" />
-          <FeeInput label="CN-US 물류비 / unit" value={rates.logistics} step="0.01"
-            onChange={(v) => handleRate('logistics', v)} unit="$ (입고 기준)" />
-          <FeeInput label="수입관세 / unit" value={rates.tariff} step="0.01"
-            onChange={(v) => handleRate('tariff', v)} unit="$ (입고 기준)" />
+          <FeeInput label="FBA 인바운드 배치 수수료 / unit 판매" value={rates.inboundPlacementFee} step="0.01"
+            onChange={(v) => handleRate('inboundPlacementFee', v)} unit="$" />
+          <FeeInput label="CN-US 물류비 / unit 판매" value={rates.logistics} step="0.01"
+            onChange={(v) => handleRate('logistics', v)} unit="$" />
+          <FeeInput label="수입관세 / unit 판매" value={rates.tariff} step="0.001"
+            onChange={(v) => handleRate('tariff', v)} unit="$" />
           <FeeInput label="제조원가 / unit" value={rates.cogs} step="0.01"
             onChange={(v) => handleRate('cogs', v)} unit="$" />
-          <FeeInput label="패키징/브랜딩/Prep / unit" value={rates.packaging} step="0.01"
+          <FeeInput label="패키징 / 브랜딩 / Prep / unit" value={rates.packaging} step="0.01"
             onChange={(v) => handleRate('packaging', v)} unit="$" />
         </div>
       )}
@@ -280,13 +291,13 @@ export function SimulationPage() {
 
             {/* ════ 유료 매출 ════ */}
             <SectionRow label="유료 매출" />
-            <tr className="sim-input-row">
-              <td className="sim-lbl">판매량 (개)</td>
-              {inputs.map((_, i) => <InputCell key={i} {...ic(i, 'paidUnits', { suffix: '개', step: '1', min: '0' })} />)}
-            </tr>
             <tr>
-              <td className="sim-lbl sim-calc-lbl">유료광고 매출비율 (전체 매출의 %)</td>
-              {calc.map((c, i) => <ValCell key={i} v={c.paidRatio} fmt={fP} />)}
+              <td className="sim-lbl sim-calc-lbl">판매량 (개)</td>
+              {calc.map((c, i) => <ValCell key={i} v={c.paidUnits} fmt={fN} />)}
+            </tr>
+            <tr className="sim-input-row">
+              <td className="sim-lbl">유료광고 매출비율 (%)</td>
+              {inputs.map((_, i) => <InputCell key={i} {...ic(i, 'paidRatio', { suffix: '%', step: '1', min: '0' })} />)}
             </tr>
             <tr>
               <td className="sim-lbl sim-calc-lbl">유료광고 매출액 ($)</td>
@@ -309,7 +320,7 @@ export function SimulationPage() {
             </tr>
             <tr>
               <td className="sim-lbl sim-calc-lbl">오가닉 매출비율 (전체 매출의 %)</td>
-              {calc.map((c, i) => <ValCell key={i} v={c.organicRatio} fmt={fP} />)}
+              {calc.map((c, i) => <ValCell key={i} v={c.organicRatioDec} fmt={fP} />)}
             </tr>
             <tr>
               <td className="sim-lbl sim-calc-lbl">오가닉 매출액 ($)</td>
