@@ -599,6 +599,8 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
   const [selectedSku,    setSelectedSku]    = useState(skus[0]?.sku || null);
   const [activeTab,      setActiveTab]      = useState("keywords"); // "keywords" | "asins"
   const [kwType,         setKwType]         = useState("positive"); // "positive" | "negative"
+  const [kwMatchFilter,  setKwMatchFilter]  = useState("all");      // "all" | "Exact" | "Phrase" | "Broad"
+  const [kwStatusFilter, setKwStatusFilter] = useState("all");      // "all" | "active" | "paused"
   const [asinType,       setAsinType]       = useState("target");   // "target"   | "negative"
   const [selectedKwId,   setSelectedKwId]   = useState(null);       // keyword detail drill-down
   const [selectedAsinId, setSelectedAsinId] = useState(null);       // asin detail drill-down
@@ -629,10 +631,11 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
     setSelectedKwId(null); setSelectedAsinId(null);
     setAddingBid(false); setAddingKw(false); setAddingAsin(false);
     setEditingKwId(null); setEditingAsinId(null);
+    setKwMatchFilter("all"); setKwStatusFilter("all");
   }, [selectedSku]);
-  React.useEffect(() => { setSelectedKwId(null);   setAddingBid(false); setAddingKw(false);   setEditingKwId(null);   }, [kwType]);
+  React.useEffect(() => { setSelectedKwId(null); setAddingBid(false); setAddingKw(false); setEditingKwId(null); setKwMatchFilter("all"); setKwStatusFilter("all"); }, [kwType]);
   React.useEffect(() => { setSelectedAsinId(null); setAddingBid(false); setAddingAsin(false); setEditingAsinId(null); }, [asinType]);
-  React.useEffect(() => { setSelectedKwId(null);   setSelectedAsinId(null); setAddingBid(false); setEditingKwId(null); setEditingAsinId(null); }, [activeTab]);
+  React.useEffect(() => { setSelectedKwId(null); setSelectedAsinId(null); setAddingBid(false); setEditingKwId(null); setEditingAsinId(null); setKwMatchFilter("all"); setKwStatusFilter("all"); }, [activeTab]);
   React.useEffect(() => {
     setAddingBid(false);
     setBidDraft({ date: todayISO(), bid: 1.0, note: "" });
@@ -649,6 +652,9 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
   const negativeAsins = skuAsins.filter(a => a.asin_type === "negative");
 
   const displayedKws   = kwType   === "positive" ? positiveKws  : negativeKws;
+  const filteredKws    = displayedKws
+    .filter(k => kwMatchFilter  === "all" || k.match_type === kwMatchFilter)
+    .filter(k => kwStatusFilter === "all" || k.status     === kwStatusFilter);
   const displayedAsins = asinType === "target"   ? targetAsins  : negativeAsins;
 
   const selKw   = keywords.find(k => k.id === selectedKwId);
@@ -968,6 +974,40 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
           <IPlus size={13} /><span>{kwType === "positive" ? "타겟 키워드 추가" : "네거티브 추가"}</span>
         </button>
       </div>
+      {/* Filters: match type + status */}
+      <div style={{ padding: "6px 16px", borderBottom: "0.5px solid var(--separator)", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+          <span style={{ fontSize: 12, color: "var(--fg-tertiary)" }}>매치 타입</span>
+          {["all", ...(kwType === "positive" ? POSITIVE_MATCH_TYPES : NEGATIVE_MATCH_TYPES)].map(m => {
+            const count = m === "all" ? displayedKws.length : displayedKws.filter(k => k.match_type === m).length;
+            const active = kwMatchFilter === m;
+            const color = m === "all" ? null : (kwType === "positive" ? POS_MATCH_COLORS[m] : NEG_MATCH_COLORS[m]);
+            return (
+              <button key={m} onClick={() => setKwMatchFilter(m)}
+                className={active ? `pill ${color || "blue"}` : "pill"}
+                style={{ cursor: "pointer", border: active ? "none" : "1px solid var(--separator)", background: active ? undefined : "transparent", color: active ? undefined : "var(--fg-secondary)", opacity: count === 0 ? 0.4 : 1, fontSize: 12 }}>
+                {m === "all" ? "전체" : m} ({count})
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ width: "0.5px", height: 16, background: "var(--separator)", flexShrink: 0 }} />
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <span style={{ fontSize: 12, color: "var(--fg-tertiary)" }}>상태</span>
+          {[["all", "전체"], ["active", "active"], ["paused", "paused"]].map(([val, label]) => {
+            const count = val === "all" ? displayedKws.length : displayedKws.filter(k => k.status === val).length;
+            const active = kwStatusFilter === val;
+            const color = val === "active" ? "green" : val === "paused" ? "gray" : null;
+            return (
+              <button key={val} onClick={() => setKwStatusFilter(val)}
+                className={active ? `pill ${color || "blue"}` : "pill"}
+                style={{ cursor: "pointer", border: active ? "none" : "1px solid var(--separator)", background: active ? undefined : "transparent", color: active ? undefined : "var(--fg-secondary)", opacity: count === 0 ? 0.4 : 1, fontSize: 12 }}>
+                {label} ({count})
+              </button>
+            );
+          })}
+        </div>
+      </div>
       {kwType === "negative" && (
         <div style={{ padding: "7px 16px", background: "rgba(255,59,48,.06)", borderBottom: "0.5px solid var(--separator)", fontSize: 12, color: "var(--fg-secondary)" }}>
           네거티브 키워드는 해당 검색어에 광고가 노출되지 않도록 제외합니다. Broad 매치는 지원되지 않습니다.
@@ -994,11 +1034,11 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
       <table className="table">
         <thead>
           <tr>
-            <th>키워드</th>
+            <th style={{ width: 160 }}>키워드</th>
             <th style={{ width: 100 }}>매치 타입</th>
-            {kwType === "positive" && <th className="num" style={{ width: 90 }}>최근 입찰가</th>}
-            {kwType === "positive" && <th className="num" style={{ width: 80 }}>최저 입찰가</th>}
-            {kwType === "positive" && <th className="num" style={{ width: 80 }}>최고 입찰가</th>}
+            {kwType === "positive" && <th className="num" style={{ width: 100 }}>최근 입찰가</th>}
+            {kwType === "positive" && <th className="num" style={{ width: 100, whiteSpace: "nowrap" }}>최저 입찰가</th>}
+            {kwType === "positive" && <th className="num" style={{ width: 100, whiteSpace: "nowrap" }}>최고 입찰가</th>}
             {kwType === "positive" && <th style={{ width: 90 }}>등록일</th>}
             <th style={{ width: 80 }}>상태</th>
             <th>메모</th>
@@ -1006,7 +1046,7 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
           </tr>
         </thead>
         <tbody>
-          {displayedKws.map(k => {
+          {filteredKws.map(k => {
             const lb = latestBid(k.bids);
             const minBid = k.bids?.length ? Math.min(...k.bids.map(b => b.bid)) : null;
             const maxBid = k.bids?.length ? Math.max(...k.bids.map(b => b.bid)) : null;
@@ -1074,9 +1114,11 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
               </tr>
             );
           })}
-          {displayedKws.length === 0 && (
+          {filteredKws.length === 0 && (
             <tr><td colSpan={kwType === "positive" ? 9 : 5} style={{ textAlign: "center", padding: "36px 0", color: "var(--fg-tertiary)" }}>
-              {selectedSku ? (kwType === "positive" ? "등록된 타겟 키워드가 없습니다." : "등록된 네거티브 키워드가 없습니다.") : "SKU를 먼저 선택하세요."}
+              {!selectedSku ? "SKU를 먼저 선택하세요."
+                : (kwMatchFilter !== "all" || kwStatusFilter !== "all") ? "조건에 맞는 키워드가 없습니다."
+                : kwType === "positive" ? "등록된 타겟 키워드가 없습니다." : "등록된 네거티브 키워드가 없습니다."}
             </td></tr>
           )}
         </tbody>
