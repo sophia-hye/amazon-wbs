@@ -139,6 +139,172 @@ const fN  = (v) => isFinite(v) ? Math.round(v).toLocaleString() : '–'
 const fP  = (v) => isFinite(v) ? `${(v * 100).toFixed(2)}%` : '–'
 const fPp = (v) => isFinite(v) ? `${(v * 100).toFixed(1)}%` : '–'
 
+// ── Chart
+const CHART_W = 720
+const CHART_H = 190
+const PL = 64, PR = 16, PT = 12, PB = 28
+const CW = CHART_W - PL - PR
+const CH = CHART_H - PT - PB
+
+const CHART_SERIES = [
+  { key: 'revenue', label: '매출',    color: '#007AFF' },
+  { key: 'adSpend', label: '광고비',  color: '#FF9500' },
+  { key: 'profit',  label: '영업이익', color: '#34C759' },
+]
+
+function fK(v) {
+  const abs = Math.abs(v)
+  const s   = abs >= 1000 ? `$${(abs / 1000).toFixed(1)}K` : `$${abs.toFixed(0)}`
+  return v < 0 ? `(${s})` : s
+}
+
+function SimChart({ calc }) {
+  const [hovIdx, setHovIdx] = useState(null)
+
+  const data = calc.map((c) => ({
+    revenue: c.targetRevenue,
+    adSpend: c.adSpend,
+    profit:  c.operatingProfit,
+  }))
+
+  const allV   = data.flatMap((d) => [d.revenue, d.adSpend, d.profit])
+  const rawMin = Math.min(...allV)
+  const rawMax = Math.max(...allV)
+  const vPad   = (rawMax - rawMin) * 0.12 || 500
+  const vMin   = rawMin - vPad
+  const vMax   = rawMax + vPad
+  const vRange = vMax - vMin
+
+  const xOf = (i) => PL + (i / (MONTHS.length - 1)) * CW
+  const yOf = (v)  => PT + CH - ((v - vMin) / vRange) * CH
+
+  const rawStep = (vMax - vMin) / 5
+  const step    = Math.ceil(rawStep / 1000) * 1000 || 500
+  const t0      = Math.ceil(vMin / step) * step
+  const ticks   = []
+  for (let t = t0; t < vMax + step; t += step) ticks.push(t)
+
+  const linePath = (key) =>
+    data.map((d, i) =>
+      `${i === 0 ? 'M' : 'L'}${xOf(i).toFixed(1)},${yOf(d[key]).toFixed(1)}`
+    ).join(' ')
+
+  const y0       = yOf(0)
+  const showZero = y0 >= PT && y0 <= PT + CH
+
+  const handleMouseMove = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const mx   = (e.clientX - rect.left) / rect.width * CHART_W
+    let closest = 0, minD = Infinity
+    for (let i = 0; i < data.length; i++) {
+      const d = Math.abs(xOf(i) - mx)
+      if (d < minD) { minD = d; closest = i }
+    }
+    setHovIdx(closest)
+  }
+
+  return (
+    <div className="sim-chart-card">
+      <div className="sim-chart-header">
+        <span className="sim-chart-title">월별 추이</span>
+        <div className="sim-chart-legend">
+          {CHART_SERIES.map((s) => (
+            <span key={s.key} className="sim-chart-leg-item">
+              <span className="sim-chart-dot" style={{ background: s.color }} />
+              {s.label}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ position: 'relative' }}>
+        <svg
+          viewBox={`0 0 ${CHART_W} ${CHART_H}`}
+          style={{ width: '100%', height: 'auto', display: 'block', overflow: 'visible' }}
+          onMouseMove={handleMouseMove}
+          onMouseLeave={() => setHovIdx(null)}
+        >
+          {/* Y grid + labels */}
+          {ticks.map((t) => {
+            const y = yOf(t)
+            if (y < PT - 4 || y > PT + CH + 4) return null
+            return (
+              <g key={t}>
+                <line x1={PL} x2={CHART_W - PR} y1={y} y2={y}
+                  stroke="var(--separator)" strokeWidth={0.5} />
+                <text x={PL - 6} y={y} dy="0.35em"
+                  textAnchor="end" fontSize={10} fill="var(--fg-tertiary)">
+                  {fK(t)}
+                </text>
+              </g>
+            )
+          })}
+
+          {/* Zero line */}
+          {showZero && (
+            <line x1={PL} x2={CHART_W - PR} y1={y0} y2={y0}
+              stroke="var(--fg-secondary)" strokeWidth={1} strokeDasharray="4 3" />
+          )}
+
+          {/* X labels */}
+          {MONTHS.map((m, i) => (
+            <text key={m} x={xOf(i)} y={CHART_H - PB + 14}
+              textAnchor="middle" fontSize={10} fill="var(--fg-secondary)">
+              {m}
+            </text>
+          ))}
+
+          {/* Lines */}
+          {CHART_SERIES.map((s) => (
+            <path key={s.key} d={linePath(s.key)}
+              fill="none" stroke={s.color} strokeWidth={2.5}
+              strokeLinejoin="round" strokeLinecap="round" />
+          ))}
+
+          {/* Dots */}
+          {CHART_SERIES.map((s) =>
+            data.map((d, i) => (
+              <circle key={`${s.key}-${i}`}
+                cx={xOf(i)} cy={yOf(d[s.key])}
+                r={hovIdx === i ? 5 : 3.5}
+                fill={hovIdx === i ? s.color : 'var(--bg-elev-2)'}
+                stroke={s.color} strokeWidth={1.5} />
+            ))
+          )}
+
+          {/* Hover line */}
+          {hovIdx !== null && (
+            <line x1={xOf(hovIdx)} x2={xOf(hovIdx)} y1={PT} y2={PT + CH}
+              stroke="var(--fg-tertiary)" strokeWidth={1} strokeDasharray="3 3" />
+          )}
+        </svg>
+
+        {/* Tooltip */}
+        {hovIdx !== null && (() => {
+          const d    = data[hovIdx]
+          const pct  = xOf(hovIdx) / CHART_W * 100
+          const left = hovIdx < MONTHS.length / 2
+          return (
+            <div className="sim-tooltip"
+              style={left ? { left: `${pct + 1}%` } : { right: `${100 - pct + 1}%` }}>
+              <div className="sim-tt-mo">{MONTHS[hovIdx]}</div>
+              {CHART_SERIES.map((s) => (
+                <div key={s.key} className="sim-tt-row">
+                  <span className="sim-tt-label" style={{ color: s.color }}>{s.label}</span>
+                  <span className="sim-tt-val"
+                    style={{ color: s.key === 'profit' && d[s.key] < 0 ? '#FF3B30' : undefined }}>
+                    {f$(d[s.key])}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )
+        })()}
+      </div>
+    </div>
+  )
+}
+
 // ── Sub-components
 function SectionRow({ label }) {
   return (
@@ -258,6 +424,9 @@ export function SimulationPage() {
             onChange={(v) => handleRate('packaging', v)} unit="$" />
         </div>
       )}
+
+      {/* ── Chart */}
+      <SimChart calc={calc} />
 
       {/* ── Spreadsheet */}
       <div className="sim-scroll">
