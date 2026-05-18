@@ -1276,7 +1276,7 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
         </div>
       </div>
 
-      <div className="kpi-grid" style={{ gridTemplateColumns: "repeat(4,1fr)" }}>
+      <div className="kpi-grid" style={{ gridTemplateColumns: "repeat(4,1fr)", marginTop: 16 }}>
         <div className="kpi">
           <div className="kpi-label"><span className="ic"><ITarget size={14} /></span><span>타겟 키워드</span></div>
           <div className="kpi-value">{activePosKws.length}<span style={{ fontSize: 16, color: "var(--fg-tertiary)", fontWeight: 500 }}>/{positiveKws.length}</span></div>
@@ -1299,7 +1299,7 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
         </div>
       </div>
 
-      <div className="segmented" style={{ alignSelf: "flex-start" }}>
+      <div className="segmented" style={{ alignSelf: "flex-start", marginTop: 16 }}>
         <button aria-pressed={activeTab === "keywords"} onClick={() => setActiveTab("keywords")}>키워드 ({skuKws.length})</button>
         <button aria-pressed={activeTab === "asins"}    onClick={() => setActiveTab("asins")}>광고 ASIN ({skuAsins.length})</button>
       </div>
