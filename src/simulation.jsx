@@ -628,7 +628,7 @@ export function SimulationPage() {
               <td className="sim-lbl">공헌이익/개 — 광고·고정비 제외 ($)</td>
               {calc.map((c, i) => (
                 <td key={i} className={`sim-val ${c.contributionMargin >= 0 ? 'sim-pos' : 'sim-neg'}`}>
-                  {f$(c.contributionMargin)}
+                  {inputs[i].targetUnits === 0 ? '–' : f$(c.contributionMargin)}
                 </td>
               ))}
             </tr>
@@ -636,13 +636,17 @@ export function SimulationPage() {
               <td className="sim-lbl">광고 후 공헌이익/개 ($)</td>
               {calc.map((c, i) => (
                 <td key={i} className={`sim-val ${c.contributionAfterAd >= 0 ? 'sim-pos' : 'sim-neg'}`}>
-                  {f$(c.contributionAfterAd)}
+                  {inputs[i].targetUnits === 0 ? '–' : f$(c.contributionAfterAd)}
                 </td>
               ))}
             </tr>
             <tr>
               <td className="sim-lbl">Break-even ACoS (광고매출 기준)</td>
-              {calc.map((c, i) => <ValCell key={i} v={c.breakEvenAcos} fmt={fPp} />)}
+              {calc.map((c, i) => (
+                <td key={i} className="sim-val">
+                  {inputs[i].targetUnits === 0 ? '–' : fPp(c.breakEvenAcos)}
+                </td>
+              ))}
             </tr>
 
           </tbody>
