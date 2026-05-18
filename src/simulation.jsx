@@ -1,10 +1,14 @@
 import { useState, useMemo } from 'react'
 
-const MONTHS = ['5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월']
+const MONTHS = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월']
 
 // Per-month editable inputs
 // paidRatio: 유료광고 매출비율 (%) — primary driver; paidUnits is derived
 const INITIAL_INPUTS = [
+  { aov: 14.99, targetUnits: 0,    paidRatio: 90, acos: 130, opex: 0    },
+  { aov: 14.99, targetUnits: 0,    paidRatio: 90, acos: 130, opex: 0    },
+  { aov: 14.99, targetUnits: 0,    paidRatio: 90, acos: 130, opex: 0    },
+  { aov: 14.99, targetUnits: 0,    paidRatio: 90, acos: 130, opex: 0    },
   { aov: 14.99, targetUnits: 150,  paidRatio: 85, acos: 120, opex: 2200 },
   { aov: 14.99, targetUnits: 500,  paidRatio: 80, acos: 110, opex: 700  },
   { aov: 14.99, targetUnits: 650,  paidRatio: 75, acos: 95,  opex: 700  },
@@ -141,8 +145,8 @@ const fPp = (v) => isFinite(v) ? `${(v * 100).toFixed(1)}%` : '–'
 
 // ── Chart
 const CHART_W = 720
-const CHART_H = 190
-const PL = 64, PR = 16, PT = 12, PB = 28
+const CHART_H = 160
+const PL = 64, PR = 16, PT = 10, PB = 26
 const CW = CHART_W - PL - PR
 const CH = CHART_H - PT - PB
 
@@ -311,7 +315,7 @@ function SimChart({ calc }) {
 function SectionRow({ label }) {
   return (
     <tr className="sim-section-row">
-      <td colSpan={9}>{label}</td>
+      <td colSpan={13}>{label}</td>
     </tr>
   )
 }
@@ -391,7 +395,7 @@ export function SimulationPage() {
         <div>
           <div className="page-title">매출 시뮬레이션</div>
           <div className="page-subtitle">
-            릴라헤이븐 Amazon US 2026년 5~12월 · 파란색 셀 입력 시 자동 계산
+            릴라헤이븐 Amazon US 2026년 1~12월 · 파란색 셀 입력 시 자동 계산
           </div>
         </div>
         <button className="btn" onClick={() => setShowSettings((s) => !s)}>
