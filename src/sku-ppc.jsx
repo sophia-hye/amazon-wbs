@@ -589,34 +589,49 @@ export function PPCPage({ campaigns, setCampaigns, skus }) {
   );
 }
 
-// ===== TARGETING: Keyword + Ad ASIN management per SKU =====
-// Positive keyword match types (all three standard Amazon SP types)
-// Negative keyword match types (Broad not supported by Amazon SP)
+// ===== TARGETING: SKU → Keyword/ASIN → Daily Bid (3-level drill-down) =====
+// Positive: Exact / Phrase / Broad  |  Negative: Exact / Phrase only (Amazon SP)
 const POS_MATCH_COLORS = { Exact: "blue", Phrase: "orange", Broad: "gray" };
 const NEG_MATCH_COLORS = { Exact: "red", Phrase: "orange" };
 
 export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, setTargetingAsins }) {
-  const [selectedSku, setSelectedSku] = useState(skus[0]?.sku || null);
-  const [activeTab, setActiveTab] = useState("keywords"); // "keywords" | "asins"
-  const [kwType, setKwType]     = useState("positive");   // "positive" | "negative"
-  const [asinType, setAsinType] = useState("target");     // "target"   | "negative"
+  // Navigation
+  const [selectedSku,    setSelectedSku]    = useState(skus[0]?.sku || null);
+  const [activeTab,      setActiveTab]      = useState("keywords"); // "keywords" | "asins"
+  const [kwType,         setKwType]         = useState("positive"); // "positive" | "negative"
+  const [asinType,       setAsinType]       = useState("target");   // "target"   | "negative"
+  const [selectedKwId,   setSelectedKwId]   = useState(null);       // keyword detail drill-down
+  const [selectedAsinId, setSelectedAsinId] = useState(null);       // asin detail drill-down
 
-  // Keyword add form
-  const [kwDraft, setKwDraft] = useState({ keyword: "", match_type: "Exact", bid: 1.0, note: "" });
-  const [addingKw, setAddingKw] = useState(false);
+  // Bid log form (shared between kw and asin detail)
+  const [addingBid, setAddingBid] = useState(false);
+  const [bidDraft,  setBidDraft]  = useState(() => ({ date: todayISO(), bid: 1.0, note: "" }));
 
-  // ASIN add form
-  const [asinDraft, setAsinDraft] = useState({ asin: "", title: "", bid: 1.0, note: "" });
+  // Add-new forms
+  const [addingKw,   setAddingKw]   = useState(false);
+  const [kwDraft,    setKwDraft]    = useState({ keyword: "", match_type: "Exact", startBid: 1.0, note: "" });
   const [addingAsin, setAddingAsin] = useState(false);
+  const [asinDraft,  setAsinDraft]  = useState({ asin: "", title: "", startBid: 1.0, note: "" });
 
+  // Auto-select first SKU
   React.useEffect(() => {
     if (!selectedSku && skus.length > 0) setSelectedSku(skus[0].sku);
   }, [skus, selectedSku]);
 
-  React.useEffect(() => { setAddingKw(false); setAddingAsin(false); }, [selectedSku]);
-  React.useEffect(() => { setAddingKw(false); setKwDraft({ keyword: "", match_type: "Exact", bid: 1.0, note: "" }); }, [kwType]);
-  React.useEffect(() => { setAddingAsin(false); setAsinDraft({ asin: "", title: "", bid: 1.0, note: "" }); }, [asinType]);
+  // Reset drill-down on context changes
+  React.useEffect(() => {
+    setSelectedKwId(null); setSelectedAsinId(null);
+    setAddingBid(false); setAddingKw(false); setAddingAsin(false);
+  }, [selectedSku]);
+  React.useEffect(() => { setSelectedKwId(null);   setAddingBid(false); setAddingKw(false);   }, [kwType]);
+  React.useEffect(() => { setSelectedAsinId(null); setAddingBid(false); setAddingAsin(false); }, [asinType]);
+  React.useEffect(() => { setSelectedKwId(null);   setSelectedAsinId(null); setAddingBid(false); }, [activeTab]);
+  React.useEffect(() => {
+    setAddingBid(false);
+    setBidDraft({ date: todayISO(), bid: 1.0, note: "" });
+  }, [selectedKwId, selectedAsinId]);
 
+  // Derived lists
   const skuObj   = skus.find(s => s.sku === selectedSku);
   const skuKws   = keywords.filter(k => k.sku === selectedSku);
   const skuAsins = targetingAsins.filter(a => a.sku === selectedSku);
@@ -629,320 +644,502 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
   const displayedKws   = kwType   === "positive" ? positiveKws  : negativeKws;
   const displayedAsins = asinType === "target"   ? targetAsins  : negativeAsins;
 
-  const activePosKws     = positiveKws.filter(k => k.status === "active");
+  const selKw   = keywords.find(k => k.id === selectedKwId);
+  const selAsin = targetingAsins.find(a => a.id === selectedAsinId);
+
+  // KPI helpers
+  const activePosKws      = positiveKws.filter(k => k.status === "active");
   const activeTargetAsins = targetAsins.filter(a => a.status === "active");
-  const avgKwBid   = activePosKws.length     ? activePosKws.reduce((s, k) => s + k.bid, 0)     / activePosKws.length     : 0;
-  const avgAsinBid = activeTargetAsins.length ? activeTargetAsins.reduce((s, a) => s + a.bid, 0) / activeTargetAsins.length : 0;
+  const latestBid = (bids) => bids?.length > 0 ? bids[0].bid : null;
+  const newId = () => typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : "id" + Date.now();
 
   const POSITIVE_MATCH_TYPES = ["Exact", "Phrase", "Broad"];
-  const NEGATIVE_MATCH_TYPES = ["Exact", "Phrase"]; // Amazon SP: Negative Broad is not supported
+  const NEGATIVE_MATCH_TYPES = ["Exact", "Phrase"];
 
-  const newId = () => (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : "id" + Date.now();
-
+  // ── Keyword CRUD ───────────────────────────────────────────────
   const addKeyword = () => {
     if (!selectedSku || !kwDraft.keyword.trim()) return;
+    const isNeg = kwType === "negative";
     setKeywords([...keywords, {
       id: newId(), sku: selectedSku,
-      keyword: kwDraft.keyword,
-      match_type: kwDraft.match_type,
-      bid: kwType === "negative" ? 0 : parseFloat(kwDraft.bid) || 0,
-      status: "active",
-      note: kwDraft.note,
-      keyword_type: kwType,
+      keyword: kwDraft.keyword.trim(), match_type: kwDraft.match_type,
+      bids: isNeg ? [] : [{ date: todayISO(), bid: parseFloat(kwDraft.startBid) || 0, note: "첫 입찰가" }],
+      status: "active", note: kwDraft.note, keyword_type: kwType,
     }]);
-    setKwDraft({ keyword: "", match_type: "Exact", bid: 1.0, note: "" });
+    setKwDraft({ keyword: "", match_type: "Exact", startBid: 1.0, note: "" });
     setAddingKw(false);
   };
-  const toggleKwStatus = (id) => setKeywords(keywords.map(k => k.id === id ? { ...k, status: k.status === "active" ? "paused" : "active" } : k));
-  const removeKeyword = (id) => { if (!confirm("키워드를 삭제하시겠습니까?")) return; setKeywords(keywords.filter(k => k.id !== id)); };
+  const toggleKwStatus = (id) => setKeywords(keywords.map(k =>
+    k.id === id ? { ...k, status: k.status === "active" ? "paused" : "active" } : k
+  ));
+  const removeKeyword = (id) => {
+    if (!confirm("키워드를 삭제하시겠습니까?")) return;
+    setKeywords(keywords.filter(k => k.id !== id));
+    if (selectedKwId === id) setSelectedKwId(null);
+  };
 
+  // ── Keyword Bid CRUD ───────────────────────────────────────────
+  const addKwBid = () => {
+    if (!selKw) return;
+    setKeywords(keywords.map(k => k.id === selKw.id ? {
+      ...k, bids: [
+        { date: bidDraft.date, bid: parseFloat(bidDraft.bid) || 0, note: bidDraft.note },
+        ...(k.bids || []).filter(b => b.date !== bidDraft.date),
+      ].sort((a, b) => b.date.localeCompare(a.date)),
+    } : k));
+    setBidDraft({ date: todayISO(), bid: 1.0, note: "" });
+    setAddingBid(false);
+  };
+  const removeKwBid = (date) => setKeywords(keywords.map(k =>
+    k.id === selKw?.id ? { ...k, bids: (k.bids || []).filter(b => b.date !== date) } : k
+  ));
+
+  // ── ASIN CRUD ─────────────────────────────────────────────────
   const addAsin = () => {
     if (!selectedSku || !asinDraft.asin.trim()) return;
+    const isNeg = asinType === "negative";
     setTargetingAsins([...targetingAsins, {
       id: newId(), sku: selectedSku,
-      asin: asinDraft.asin,
-      title: asinDraft.title,
-      bid: asinType === "negative" ? 0 : parseFloat(asinDraft.bid) || 0,
-      status: "active",
-      note: asinDraft.note,
-      asin_type: asinType,
+      asin: asinDraft.asin.trim(), title: asinDraft.title,
+      bids: isNeg ? [] : [{ date: todayISO(), bid: parseFloat(asinDraft.startBid) || 0, note: "첫 입찰가" }],
+      status: "active", note: asinDraft.note, asin_type: asinType,
     }]);
-    setAsinDraft({ asin: "", title: "", bid: 1.0, note: "" });
+    setAsinDraft({ asin: "", title: "", startBid: 1.0, note: "" });
     setAddingAsin(false);
   };
-  const toggleAsinStatus = (id) => setTargetingAsins(targetingAsins.map(a => a.id === id ? { ...a, status: a.status === "active" ? "paused" : "active" } : a));
-  const removeAsin = (id) => { if (!confirm("광고 ASIN을 삭제하시겠습니까?")) return; setTargetingAsins(targetingAsins.filter(a => a.id !== id)); };
+  const toggleAsinStatus = (id) => setTargetingAsins(targetingAsins.map(a =>
+    a.id === id ? { ...a, status: a.status === "active" ? "paused" : "active" } : a
+  ));
+  const removeAsin = (id) => {
+    if (!confirm("광고 ASIN을 삭제하시겠습니까?")) return;
+    setTargetingAsins(targetingAsins.filter(a => a.id !== id));
+    if (selectedAsinId === id) setSelectedAsinId(null);
+  };
 
+  // ── ASIN Bid CRUD ──────────────────────────────────────────────
+  const addAsinBid = () => {
+    if (!selAsin) return;
+    setTargetingAsins(targetingAsins.map(a => a.id === selAsin.id ? {
+      ...a, bids: [
+        { date: bidDraft.date, bid: parseFloat(bidDraft.bid) || 0, note: bidDraft.note },
+        ...(a.bids || []).filter(b => b.date !== bidDraft.date),
+      ].sort((a, b) => b.date.localeCompare(a.date)),
+    } : a));
+    setBidDraft({ date: todayISO(), bid: 1.0, note: "" });
+    setAddingBid(false);
+  };
+  const removeAsinBid = (date) => setTargetingAsins(targetingAsins.map(a =>
+    a.id === selAsin?.id ? { ...a, bids: (a.bids || []).filter(b => b.date !== date) } : a
+  ));
+
+  // ── Helpers ───────────────────────────────────────────────────
   const matchPill = (match_type, keyword_type) => {
     const isNeg = keyword_type === "negative";
     const color = isNeg ? (NEG_MATCH_COLORS[match_type] || "red") : (POS_MATCH_COLORS[match_type] || "gray");
-    const label = isNeg ? `-${match_type}` : match_type;
-    return <span className={`pill ${color}`}>{label}</span>;
+    return <span className={`pill ${color}`}>{isNeg ? `-${match_type}` : match_type}</span>;
   };
 
-  if (skus.length === 0) {
+  const renderBidChart = (bids) => {
+    if (!bids || bids.length === 0) return null;
+    const sorted = [...bids].sort((a, b) => a.date.localeCompare(b.date));
+    const min = Math.min(...sorted.map(b => b.bid));
+    const max = Math.max(...sorted.map(b => b.bid));
+    const range = max - min || 1;
+    const W = 100, H = 100;
+    const pts = sorted.map((b, i) => {
+      const x = sorted.length === 1 ? W / 2 : (i / (sorted.length - 1)) * W;
+      const y = H - ((b.bid - min) / range) * (H - 20) - 10;
+      return [x, y];
+    });
     return (
-      <div className="page">
-        <div className="page-header">
-          <div>
-            <h1 className="page-title">Targeting</h1>
-            <p className="page-subtitle">SKU별 키워드 · 광고 ASIN 관리</p>
-          </div>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: "100%", height: 120, display: "block" }}>
+        <defs>
+          <linearGradient id="tbidg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={`M ${pts[0][0]} ${H} L ${pts.map(p=>`${p[0]} ${p[1]}`).join(" L ")} L ${pts[pts.length-1][0]} ${H} Z`} fill="url(#tbidg)" />
+        <path d={`M ${pts.map(p=>`${p[0]} ${p[1]}`).join(" L ")}`} fill="none" stroke="var(--accent)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+        {pts.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r="1.6" fill="var(--accent)" vectorEffect="non-scaling-stroke" />)}
+      </svg>
+    );
+  };
+
+  // ── Shared bid log section ─────────────────────────────────────
+  const BidLog = ({ bids, onAdd, onRemove }) => (
+    <div style={{ marginTop: 14 }}>
+      <div className="section-title">
+        <h2>Daily Bid 기록</h2>
+        {!addingBid && (
+          <button className="btn btn-primary" onClick={() => setAddingBid(true)}>
+            <IPlus size={14} /><span>입찰가 기록</span>
+          </button>
+        )}
+      </div>
+      {addingBid && (
+        <div className="bid-add-row">
+          <input className="input" type="date" style={{ width: 140 }} value={bidDraft.date}
+            onChange={(e) => setBidDraft({ ...bidDraft, date: e.target.value })} />
+          <input className="input" type="number" step="0.01" style={{ width: 100 }} placeholder="입찰가 ($)"
+            value={bidDraft.bid} onChange={(e) => setBidDraft({ ...bidDraft, bid: e.target.value })} />
+          <input className="input" placeholder="메모 (선택)" value={bidDraft.note}
+            onChange={(e) => setBidDraft({ ...bidDraft, note: e.target.value })} />
+          <button className="btn" onClick={() => setAddingBid(false)}>취소</button>
+          <button className="btn btn-primary" onClick={onAdd}>저장</button>
         </div>
-        <div className="empty-state">
-          <div style={{fontSize:14,fontWeight:500,marginBottom:4}}>먼저 SKU를 등록해주세요</div>
-          <div style={{fontSize:12.5,color:"var(--fg-tertiary)"}}>좌측 메뉴 <strong>SKUs</strong>에서 상품을 먼저 등록하세요.</div>
+      )}
+      <table className="table bid-table">
+        <thead>
+          <tr>
+            <th style={{ width: 130 }}>날짜</th>
+            <th className="num" style={{ width: 100 }}>입찰가</th>
+            <th className="num" style={{ width: 80 }}>변동</th>
+            <th>메모</th>
+            <th style={{ width: 50 }}></th>
+          </tr>
+        </thead>
+        <tbody>
+          {(bids || []).map((b, i) => {
+            const prev  = (bids || [])[i + 1];
+            const delta = prev ? b.bid - prev.bid : 0;
+            return (
+              <tr key={b.date}>
+                <td style={{ fontFamily: "var(--font-mono)", fontSize: 12.5 }}>{b.date}</td>
+                <td className="num" style={{ fontWeight: 600, fontSize: 14 }}>${b.bid.toFixed(2)}</td>
+                <td className="num">
+                  {delta !== 0
+                    ? <span className={`card-delta ${delta > 0 ? "up" : "down"}`}>{delta > 0 ? "▲" : "▼"} ${Math.abs(delta).toFixed(2)}</span>
+                    : <span style={{ color: "var(--fg-quaternary)" }}>—</span>}
+                </td>
+                <td style={{ color: "var(--fg-secondary)" }}>{b.note || <span style={{ color: "var(--fg-quaternary)" }}>—</span>}</td>
+                <td>
+                  <button className="icon-btn" onClick={() => onRemove(b.date)} style={{ width: 24, height: 24, color: "var(--fg-tertiary)" }}>
+                    <svg width="12" height="12" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M5 5l8 8M13 5l-8 8" /></svg>
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+          {(!bids || bids.length === 0) && (
+            <tr><td colSpan="5" style={{ textAlign: "center", padding: "30px 0", color: "var(--fg-tertiary)" }}>입찰가 기록이 없습니다.</td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  if (skus.length === 0) return (
+    <div className="page">
+      <div className="page-header"><div>
+        <h1 className="page-title">Targeting</h1>
+        <p className="page-subtitle">SKU별 키워드 · 광고 ASIN 관리</p>
+      </div></div>
+      <div className="empty-state">
+        <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 4 }}>먼저 SKU를 등록해주세요</div>
+        <div style={{ fontSize: 12.5, color: "var(--fg-tertiary)" }}>좌측 메뉴 <strong>SKUs</strong>에서 상품을 먼저 등록하세요.</div>
+      </div>
+    </div>
+  );
+
+  // ── Keyword detail view ────────────────────────────────────────
+  const kwDetail = selKw && activeTab === "keywords" && (
+    <div className="ppc-detail" style={{ padding: "calc(20px * var(--density))" }}>
+      <div className="ppc-detail-head">
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+            {matchPill(selKw.match_type, selKw.keyword_type || "positive")}
+            <span className={`pill ${selKw.status === "active" ? "green" : "gray"}`}>{selKw.status}</span>
+          </div>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 600, letterSpacing: "-0.02em" }}>{selKw.keyword}</h2>
+          {selKw.note && <div style={{ fontSize: 12, color: "var(--fg-tertiary)", marginTop: 4 }}>{selKw.note}</div>}
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button className="btn" onClick={() => setSelectedKwId(null)}><IChevL size={13} /><span>키워드 목록</span></button>
+          <button className="btn" onClick={() => toggleKwStatus(selKw.id)}>{selKw.status === "active" ? "일시정지" : "재개"}</button>
+          <button className="btn" onClick={() => removeKeyword(selKw.id)} style={{ color: "var(--red)" }}>삭제</button>
         </div>
       </div>
-    );
-  }
+      <div className="ppc-perf">
+        <div><span>최근 입찰가</span><strong>{latestBid(selKw.bids) != null ? "$" + latestBid(selKw.bids).toFixed(2) : "—"}</strong></div>
+        <div><span>최저</span><strong>{selKw.bids?.length ? "$" + Math.min(...selKw.bids.map(b=>b.bid)).toFixed(2) : "—"}</strong></div>
+        <div><span>최고</span><strong>{selKw.bids?.length ? "$" + Math.max(...selKw.bids.map(b=>b.bid)).toFixed(2) : "—"}</strong></div>
+        <div><span>기록 수</span><strong>{selKw.bids?.length ?? 0}개</strong></div>
+      </div>
+      {selKw.bids?.length > 0 && (
+        <div className="card" style={{ padding: 14, marginTop: 14 }}>
+          <div className="section-title" style={{ marginBottom: 6 }}>
+            <h2 style={{ fontSize: 14 }}>입찰가 추이</h2>
+            <span style={{ fontSize: 12, color: "var(--fg-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+              최저 ${Math.min(...selKw.bids.map(b=>b.bid)).toFixed(2)} · 최고 ${Math.max(...selKw.bids.map(b=>b.bid)).toFixed(2)}
+            </span>
+          </div>
+          {renderBidChart(selKw.bids)}
+        </div>
+      )}
+      <BidLog bids={selKw.bids} onAdd={addKwBid} onRemove={removeKwBid} />
+    </div>
+  );
 
+  // ── ASIN detail view ───────────────────────────────────────────
+  const asinDetail = selAsin && activeTab === "asins" && (
+    <div className="ppc-detail" style={{ padding: "calc(20px * var(--density))" }}>
+      <div className="ppc-detail-head">
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+            <code style={{ fontSize: 12, color: "var(--fg-tertiary)", fontFamily: "var(--font-mono)" }}>{selAsin.asin}</code>
+            <span className={`pill ${selAsin.status === "active" ? "green" : "gray"}`}>{selAsin.status}</span>
+          </div>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 600, letterSpacing: "-0.02em" }}>{selAsin.title || selAsin.asin}</h2>
+          {selAsin.note && <div style={{ fontSize: 12, color: "var(--fg-tertiary)", marginTop: 4 }}>{selAsin.note}</div>}
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button className="btn" onClick={() => setSelectedAsinId(null)}><IChevL size={13} /><span>ASIN 목록</span></button>
+          <button className="btn" onClick={() => toggleAsinStatus(selAsin.id)}>{selAsin.status === "active" ? "일시정지" : "재개"}</button>
+          <button className="btn" onClick={() => removeAsin(selAsin.id)} style={{ color: "var(--red)" }}>삭제</button>
+        </div>
+      </div>
+      <div className="ppc-perf">
+        <div><span>최근 입찰가</span><strong>{latestBid(selAsin.bids) != null ? "$" + latestBid(selAsin.bids).toFixed(2) : "—"}</strong></div>
+        <div><span>최저</span><strong>{selAsin.bids?.length ? "$" + Math.min(...selAsin.bids.map(b=>b.bid)).toFixed(2) : "—"}</strong></div>
+        <div><span>최고</span><strong>{selAsin.bids?.length ? "$" + Math.max(...selAsin.bids.map(b=>b.bid)).toFixed(2) : "—"}</strong></div>
+        <div><span>기록 수</span><strong>{selAsin.bids?.length ?? 0}개</strong></div>
+      </div>
+      {selAsin.bids?.length > 0 && (
+        <div className="card" style={{ padding: 14, marginTop: 14 }}>
+          <div className="section-title" style={{ marginBottom: 6 }}>
+            <h2 style={{ fontSize: 14 }}>입찰가 추이</h2>
+            <span style={{ fontSize: 12, color: "var(--fg-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+              최저 ${Math.min(...selAsin.bids.map(b=>b.bid)).toFixed(2)} · 최고 ${Math.max(...selAsin.bids.map(b=>b.bid)).toFixed(2)}
+            </span>
+          </div>
+          {renderBidChart(selAsin.bids)}
+        </div>
+      )}
+      <BidLog bids={selAsin.bids} onAdd={addAsinBid} onRemove={removeAsinBid} />
+    </div>
+  );
+
+  // ── Keyword list table ─────────────────────────────────────────
+  const kwList = (
+    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      <div style={{ padding: "10px 16px", borderBottom: "0.5px solid var(--separator)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+        <div className="segmented">
+          <button aria-pressed={kwType === "positive"} onClick={() => setKwType("positive")}>타겟 키워드 ({positiveKws.length})</button>
+          <button aria-pressed={kwType === "negative"} onClick={() => setKwType("negative")}>네거티브 ({negativeKws.length})</button>
+        </div>
+        <button className="btn btn-primary" onClick={() => setAddingKw(true)} disabled={!selectedSku}>
+          <IPlus size={13} /><span>{kwType === "positive" ? "타겟 키워드 추가" : "네거티브 추가"}</span>
+        </button>
+      </div>
+      {kwType === "negative" && (
+        <div style={{ padding: "7px 16px", background: "rgba(255,59,48,.06)", borderBottom: "0.5px solid var(--separator)", fontSize: 12, color: "var(--fg-secondary)" }}>
+          네거티브 키워드는 해당 검색어에 광고가 노출되지 않도록 제외합니다. Broad 매치는 지원되지 않습니다.
+        </div>
+      )}
+      {addingKw && (
+        <div className="bid-add-row" style={{ padding: "12px 16px", borderBottom: "0.5px solid var(--separator)" }}>
+          <input className="input" placeholder="키워드" style={{ flex: 2, minWidth: 140 }} value={kwDraft.keyword}
+            onChange={(e) => setKwDraft({ ...kwDraft, keyword: e.target.value })} />
+          <select className="input" style={{ width: 110 }} value={kwDraft.match_type}
+            onChange={(e) => setKwDraft({ ...kwDraft, match_type: e.target.value })}>
+            {(kwType === "positive" ? POSITIVE_MATCH_TYPES : NEGATIVE_MATCH_TYPES).map(m => <option key={m}>{m}</option>)}
+          </select>
+          {kwType === "positive" && (
+            <input className="input" type="number" step="0.01" placeholder="시작 입찰가 ($)" style={{ width: 130 }} value={kwDraft.startBid}
+              onChange={(e) => setKwDraft({ ...kwDraft, startBid: e.target.value })} />
+          )}
+          <input className="input" placeholder="메모 (선택)" style={{ flex: 2 }} value={kwDraft.note}
+            onChange={(e) => setKwDraft({ ...kwDraft, note: e.target.value })} />
+          <button className="btn" onClick={() => setAddingKw(false)}>취소</button>
+          <button className="btn btn-primary" onClick={addKeyword}>추가</button>
+        </div>
+      )}
+      <table className="table">
+        <thead>
+          <tr>
+            <th>키워드</th>
+            <th style={{ width: 120 }}>매치 타입</th>
+            {kwType === "positive" && <th className="num" style={{ width: 100 }}>최근 입찰가</th>}
+            {kwType === "positive" && <th className="num" style={{ width: 70 }}>기록</th>}
+            <th style={{ width: 90 }}>상태</th>
+            <th>메모</th>
+            <th style={{ width: kwType === "positive" ? 36 : 50 }}></th>
+          </tr>
+        </thead>
+        <tbody>
+          {displayedKws.map(k => {
+            const lb = latestBid(k.bids);
+            return (
+              <tr key={k.id} style={{ opacity: k.status === "paused" ? 0.5 : 1, cursor: kwType === "positive" ? "pointer" : "default" }}
+                onClick={kwType === "positive" ? () => setSelectedKwId(k.id) : undefined}>
+                <td style={{ fontWeight: 500 }}>{k.keyword}</td>
+                <td onClick={(e) => e.stopPropagation()}>{matchPill(k.match_type, k.keyword_type || "positive")}</td>
+                {kwType === "positive" && <td className="num" style={{ fontWeight: 600 }}>{lb != null ? "$"+lb.toFixed(2) : <span style={{ color: "var(--fg-quaternary)" }}>—</span>}</td>}
+                {kwType === "positive" && <td className="num" style={{ color: "var(--fg-tertiary)" }}>{k.bids?.length ?? 0}</td>}
+                <td onClick={(e) => e.stopPropagation()}>
+                  <button className={`pill ${k.status === "active" ? "green" : "gray"}`}
+                    style={{ cursor: "pointer", border: "none", background: "none", padding: 0 }}
+                    onClick={() => toggleKwStatus(k.id)}>{k.status}</button>
+                </td>
+                <td style={{ color: "var(--fg-secondary)", fontSize: 12.5 }}>{k.note || <span style={{ color: "var(--fg-quaternary)" }}>—</span>}</td>
+                <td onClick={(e) => e.stopPropagation()}>
+                  {kwType === "positive"
+                    ? <span style={{ color: "var(--fg-quaternary)" }}><IChev size={14} /></span>
+                    : <button className="icon-btn" onClick={() => removeKeyword(k.id)} style={{ width: 24, height: 24, color: "var(--fg-tertiary)" }}>
+                        <svg width="12" height="12" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M5 5l8 8M13 5l-8 8" /></svg>
+                      </button>}
+                </td>
+              </tr>
+            );
+          })}
+          {displayedKws.length === 0 && (
+            <tr><td colSpan={kwType === "positive" ? 7 : 5} style={{ textAlign: "center", padding: "36px 0", color: "var(--fg-tertiary)" }}>
+              {selectedSku ? (kwType === "positive" ? "등록된 타겟 키워드가 없습니다." : "등록된 네거티브 키워드가 없습니다.") : "SKU를 먼저 선택하세요."}
+            </td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  // ── ASIN list table ────────────────────────────────────────────
+  const asinList = (
+    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      <div style={{ padding: "10px 16px", borderBottom: "0.5px solid var(--separator)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+        <div className="segmented">
+          <button aria-pressed={asinType === "target"} onClick={() => setAsinType("target")}>타겟 ASIN ({targetAsins.length})</button>
+          <button aria-pressed={asinType === "negative"} onClick={() => setAsinType("negative")}>네거티브 ({negativeAsins.length})</button>
+        </div>
+        <button className="btn btn-primary" onClick={() => setAddingAsin(true)} disabled={!selectedSku}>
+          <IPlus size={13} /><span>{asinType === "target" ? "타겟 ASIN 추가" : "네거티브 ASIN 추가"}</span>
+        </button>
+      </div>
+      {asinType === "negative" && (
+        <div style={{ padding: "7px 16px", background: "rgba(255,59,48,.06)", borderBottom: "0.5px solid var(--separator)", fontSize: 12, color: "var(--fg-secondary)" }}>
+          네거티브 ASIN은 해당 상품 페이지에 광고가 노출되지 않도록 제외합니다.
+        </div>
+      )}
+      {addingAsin && (
+        <div className="bid-add-row" style={{ padding: "12px 16px", borderBottom: "0.5px solid var(--separator)" }}>
+          <input className="input" placeholder="ASIN (예: B0XXXXXX)" style={{ width: 150 }} value={asinDraft.asin}
+            onChange={(e) => setAsinDraft({ ...asinDraft, asin: e.target.value })} />
+          <input className="input" placeholder="상품명 (선택)" style={{ flex: 2 }} value={asinDraft.title}
+            onChange={(e) => setAsinDraft({ ...asinDraft, title: e.target.value })} />
+          {asinType === "target" && (
+            <input className="input" type="number" step="0.01" placeholder="시작 입찰가 ($)" style={{ width: 130 }} value={asinDraft.startBid}
+              onChange={(e) => setAsinDraft({ ...asinDraft, startBid: e.target.value })} />
+          )}
+          <input className="input" placeholder="메모 (선택)" style={{ flex: 2 }} value={asinDraft.note}
+            onChange={(e) => setAsinDraft({ ...asinDraft, note: e.target.value })} />
+          <button className="btn" onClick={() => setAddingAsin(false)}>취소</button>
+          <button className="btn btn-primary" onClick={addAsin}>추가</button>
+        </div>
+      )}
+      <table className="table">
+        <thead>
+          <tr>
+            <th style={{ width: 140 }}>ASIN</th>
+            <th>상품명</th>
+            {asinType === "target" && <th className="num" style={{ width: 100 }}>최근 입찰가</th>}
+            {asinType === "target" && <th className="num" style={{ width: 70 }}>기록</th>}
+            <th style={{ width: 90 }}>상태</th>
+            <th>메모</th>
+            <th style={{ width: asinType === "target" ? 36 : 50 }}></th>
+          </tr>
+        </thead>
+        <tbody>
+          {displayedAsins.map(a => {
+            const lb = latestBid(a.bids);
+            return (
+              <tr key={a.id} style={{ opacity: a.status === "paused" ? 0.5 : 1, cursor: asinType === "target" ? "pointer" : "default" }}
+                onClick={asinType === "target" ? () => setSelectedAsinId(a.id) : undefined}>
+                <td onClick={(e) => e.stopPropagation()}><code style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>{a.asin}</code></td>
+                <td style={{ color: "var(--fg-secondary)", fontSize: 12.5 }}>{a.title || <span style={{ color: "var(--fg-quaternary)" }}>—</span>}</td>
+                {asinType === "target" && <td className="num" style={{ fontWeight: 600 }}>{lb != null ? "$"+lb.toFixed(2) : <span style={{ color: "var(--fg-quaternary)" }}>—</span>}</td>}
+                {asinType === "target" && <td className="num" style={{ color: "var(--fg-tertiary)" }}>{a.bids?.length ?? 0}</td>}
+                <td onClick={(e) => e.stopPropagation()}>
+                  <button className={`pill ${a.status === "active" ? "green" : "gray"}`}
+                    style={{ cursor: "pointer", border: "none", background: "none", padding: 0 }}
+                    onClick={() => toggleAsinStatus(a.id)}>{a.status}</button>
+                </td>
+                <td style={{ color: "var(--fg-secondary)", fontSize: 12.5 }}>{a.note || <span style={{ color: "var(--fg-quaternary)" }}>—</span>}</td>
+                <td onClick={(e) => e.stopPropagation()}>
+                  {asinType === "target"
+                    ? <span style={{ color: "var(--fg-quaternary)" }}><IChev size={14} /></span>
+                    : <button className="icon-btn" onClick={() => removeAsin(a.id)} style={{ width: 24, height: 24, color: "var(--fg-tertiary)" }}>
+                        <svg width="12" height="12" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M5 5l8 8M13 5l-8 8" /></svg>
+                      </button>}
+                </td>
+              </tr>
+            );
+          })}
+          {displayedAsins.length === 0 && (
+            <tr><td colSpan={asinType === "target" ? 7 : 5} style={{ textAlign: "center", padding: "36px 0", color: "var(--fg-tertiary)" }}>
+              {selectedSku ? (asinType === "target" ? "등록된 타겟 ASIN이 없습니다." : "등록된 네거티브 ASIN이 없습니다.") : "SKU를 먼저 선택하세요."}
+            </td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  // ── Main render ────────────────────────────────────────────────
   return (
     <div className="page">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Targeting</h1>
-          <p className="page-subtitle">SKU별 타겟 · 네거티브 키워드 / 광고 ASIN 관리 · {skus.length}개 SKU</p>
-        </div>
-      </div>
+      <div className="page-header"><div>
+        <h1 className="page-title">Targeting</h1>
+        <p className="page-subtitle">SKU별 타겟 · 네거티브 키워드 / 광고 ASIN 관리 · {skus.length}개 SKU</p>
+      </div></div>
 
-      {/* SKU selector */}
       <div className="ppc-sku-selector">
         <label className="ppc-sku-selector-label">SKU 선택</label>
         <div className="ppc-sku-selector-row">
           <select className="input ppc-sku-select" value={selectedSku || ""}
-                  onChange={(e) => setSelectedSku(e.target.value || null)}>
+            onChange={(e) => setSelectedSku(e.target.value || null)}>
             <option value="">— SKU를 선택하세요 —</option>
-            {skus.map(s => (
-              <option key={s.sku} value={s.sku}>{s.sku} · {s.name}</option>
-            ))}
+            {skus.map(s => <option key={s.sku} value={s.sku}>{s.sku} · {s.name}</option>)}
           </select>
           {skuObj && (
             <div className="ppc-sku-selector-meta">
-              <span><span style={{color:"var(--fg-tertiary)"}}>ASIN</span> <code style={{fontFamily:"var(--font-mono)",fontSize:11.5}}>{skuObj.asin}</code></span>
-              <span><span style={{color:"var(--fg-tertiary)"}}>재고</span> <strong>{skuObj.stock}</strong></span>
+              <span><span style={{ color: "var(--fg-tertiary)" }}>ASIN</span> <code style={{ fontFamily: "var(--font-mono)", fontSize: 11.5 }}>{skuObj.asin}</code></span>
+              <span><span style={{ color: "var(--fg-tertiary)" }}>재고</span> <strong>{skuObj.stock}</strong></span>
             </div>
           )}
         </div>
       </div>
 
-      {/* KPI grid */}
-      <div className="kpi-grid" style={{gridTemplateColumns:"repeat(4,1fr)"}}>
+      <div className="kpi-grid" style={{ gridTemplateColumns: "repeat(4,1fr)" }}>
         <div className="kpi">
-          <div className="kpi-label"><span className="ic"><ITarget size={14}/></span><span>타겟 키워드</span></div>
-          <div className="kpi-value">{activePosKws.length}<span style={{fontSize:16,color:"var(--fg-tertiary)",fontWeight:500}}>/{positiveKws.length}</span></div>
-          <div className="kpi-meta"><span>활성/전체 · 평균 ${avgKwBid.toFixed(2)}</span></div>
+          <div className="kpi-label"><span className="ic"><ITarget size={14} /></span><span>타겟 키워드</span></div>
+          <div className="kpi-value">{activePosKws.length}<span style={{ fontSize: 16, color: "var(--fg-tertiary)", fontWeight: 500 }}>/{positiveKws.length}</span></div>
+          <div className="kpi-meta"><span>활성/전체</span></div>
         </div>
         <div className="kpi">
-          <div className="kpi-label"><span className="ic" style={{background:"rgba(255,59,48,.12)",color:"var(--red)"}}><ITarget size={14}/></span><span>네거티브 KW</span></div>
+          <div className="kpi-label"><span className="ic" style={{ background: "rgba(255,59,48,.12)", color: "var(--red)" }}><ITarget size={14} /></span><span>네거티브 KW</span></div>
           <div className="kpi-value">{negativeKws.length}</div>
-          <div className="kpi-meta"><span>제외 키워드 수</span></div>
+          <div className="kpi-meta"><span>제외 키워드</span></div>
         </div>
         <div className="kpi">
-          <div className="kpi-label"><span className="ic" style={{background:"rgba(52,199,89,.12)",color:"var(--green)"}}><ITarget size={14}/></span><span>타겟 ASIN</span></div>
-          <div className="kpi-value">{activeTargetAsins.length}<span style={{fontSize:16,color:"var(--fg-tertiary)",fontWeight:500}}>/{targetAsins.length}</span></div>
-          <div className="kpi-meta"><span>활성/전체 · 평균 ${avgAsinBid.toFixed(2)}</span></div>
+          <div className="kpi-label"><span className="ic" style={{ background: "rgba(52,199,89,.12)", color: "var(--green)" }}><ITarget size={14} /></span><span>타겟 ASIN</span></div>
+          <div className="kpi-value">{activeTargetAsins.length}<span style={{ fontSize: 16, color: "var(--fg-tertiary)", fontWeight: 500 }}>/{targetAsins.length}</span></div>
+          <div className="kpi-meta"><span>활성/전체</span></div>
         </div>
         <div className="kpi">
-          <div className="kpi-label"><span className="ic" style={{background:"rgba(255,59,48,.12)",color:"var(--red)"}}><ITarget size={14}/></span><span>네거티브 ASIN</span></div>
+          <div className="kpi-label"><span className="ic" style={{ background: "rgba(255,59,48,.12)", color: "var(--red)" }}><ITarget size={14} /></span><span>네거티브 ASIN</span></div>
           <div className="kpi-value">{negativeAsins.length}</div>
-          <div className="kpi-meta"><span>제외 ASIN 수</span></div>
+          <div className="kpi-meta"><span>제외 ASIN</span></div>
         </div>
       </div>
 
-      {/* Main tab: Keywords | ASINs */}
-      <div className="segmented" style={{alignSelf:"flex-start"}}>
-        <button aria-pressed={activeTab === "keywords"} onClick={() => setActiveTab("keywords")}>
-          키워드 ({skuKws.length})
-        </button>
-        <button aria-pressed={activeTab === "asins"} onClick={() => setActiveTab("asins")}>
-          광고 ASIN ({skuAsins.length})
-        </button>
+      <div className="segmented" style={{ alignSelf: "flex-start" }}>
+        <button aria-pressed={activeTab === "keywords"} onClick={() => setActiveTab("keywords")}>키워드 ({skuKws.length})</button>
+        <button aria-pressed={activeTab === "asins"}    onClick={() => setActiveTab("asins")}>광고 ASIN ({skuAsins.length})</button>
       </div>
 
-      {/* KEYWORDS tab */}
-      {activeTab === "keywords" && (
-        <div className="card" style={{padding:0,overflow:"hidden"}}>
-          {/* Sub-tab + add button */}
-          <div style={{padding:"10px 16px",borderBottom:"0.5px solid var(--separator)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>
-            <div className="segmented">
-              <button aria-pressed={kwType === "positive"} onClick={() => setKwType("positive")}>
-                타겟 키워드 ({positiveKws.length})
-              </button>
-              <button aria-pressed={kwType === "negative"} onClick={() => setKwType("negative")}>
-                네거티브 ({negativeKws.length})
-              </button>
-            </div>
-            <button className="btn btn-primary" onClick={() => setAddingKw(true)} disabled={!selectedSku}>
-              <IPlus size={13}/><span>{kwType === "positive" ? "타겟 키워드 추가" : "네거티브 추가"}</span>
-            </button>
-          </div>
-
-          {/* Negative helper text */}
-          {kwType === "negative" && (
-            <div style={{padding:"8px 16px",background:"rgba(255,59,48,.06)",borderBottom:"0.5px solid var(--separator)",fontSize:12,color:"var(--fg-secondary)"}}>
-              네거티브 키워드: 해당 검색어에 광고가 노출되지 않도록 제외합니다. Broad 매치는 Amazon SP에서 지원하지 않습니다.
-            </div>
-          )}
-
-          {/* Add form */}
-          {addingKw && (
-            <div className="bid-add-row" style={{padding:"12px 16px",borderBottom:"0.5px solid var(--separator)"}}>
-              <input className="input" placeholder="키워드" style={{flex:2,minWidth:140}} value={kwDraft.keyword}
-                     onChange={(e) => setKwDraft({...kwDraft, keyword: e.target.value})}/>
-              <select className="input" style={{width:110}} value={kwDraft.match_type}
-                      onChange={(e) => setKwDraft({...kwDraft, match_type: e.target.value})}>
-                {(kwType === "positive" ? POSITIVE_MATCH_TYPES : NEGATIVE_MATCH_TYPES).map(m => (
-                  <option key={m}>{m}</option>
-                ))}
-              </select>
-              {kwType === "positive" && (
-                <input className="input" type="number" step="0.01" placeholder="입찰가 ($)" style={{width:110}} value={kwDraft.bid}
-                       onChange={(e) => setKwDraft({...kwDraft, bid: e.target.value})}/>
-              )}
-              <input className="input" placeholder="메모 (선택)" style={{flex:2}} value={kwDraft.note}
-                     onChange={(e) => setKwDraft({...kwDraft, note: e.target.value})}/>
-              <button className="btn" onClick={() => setAddingKw(false)}>취소</button>
-              <button className="btn btn-primary" onClick={addKeyword}>추가</button>
-            </div>
-          )}
-
-          <table className="table">
-            <thead>
-              <tr>
-                <th>키워드</th>
-                <th style={{width:120}}>매치 타입</th>
-                {kwType === "positive" && <th className="num" style={{width:100}}>입찰가</th>}
-                <th style={{width:90}}>상태</th>
-                <th>메모</th>
-                <th style={{width:50}}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {displayedKws.map(k => (
-                <tr key={k.id} style={{opacity: k.status === "paused" ? 0.5 : 1}}>
-                  <td style={{fontWeight:500}}>{k.keyword}</td>
-                  <td>{matchPill(k.match_type, k.keyword_type || "positive")}</td>
-                  {kwType === "positive" && (
-                    <td className="num" style={{fontWeight:600}}>${parseFloat(k.bid).toFixed(2)}</td>
-                  )}
-                  <td>
-                    <button className={`pill ${k.status === "active" ? "green" : "gray"}`}
-                            style={{cursor:"pointer",border:"none",background:"none",padding:0}}
-                            title="클릭하여 상태 전환"
-                            onClick={() => toggleKwStatus(k.id)}>
-                      {k.status}
-                    </button>
-                  </td>
-                  <td style={{color:"var(--fg-secondary)",fontSize:12.5}}>{k.note || <span style={{color:"var(--fg-quaternary)"}}>—</span>}</td>
-                  <td>
-                    <button className="icon-btn" onClick={() => removeKeyword(k.id)} style={{width:24,height:24,color:"var(--fg-tertiary)"}}>
-                      <svg width="12" height="12" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M5 5l8 8M13 5l-8 8"/></svg>
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {displayedKws.length === 0 && (
-                <tr><td colSpan={kwType === "positive" ? 6 : 5} style={{textAlign:"center",padding:"36px 0",color:"var(--fg-tertiary)"}}>
-                  {selectedSku
-                    ? (kwType === "positive" ? "등록된 타겟 키워드가 없습니다." : "등록된 네거티브 키워드가 없습니다.")
-                    : "SKU를 먼저 선택하세요."}
-                </td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* AD ASINs tab */}
-      {activeTab === "asins" && (
-        <div className="card" style={{padding:0,overflow:"hidden"}}>
-          {/* Sub-tab + add button */}
-          <div style={{padding:"10px 16px",borderBottom:"0.5px solid var(--separator)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>
-            <div className="segmented">
-              <button aria-pressed={asinType === "target"} onClick={() => setAsinType("target")}>
-                타겟 ASIN ({targetAsins.length})
-              </button>
-              <button aria-pressed={asinType === "negative"} onClick={() => setAsinType("negative")}>
-                네거티브 ({negativeAsins.length})
-              </button>
-            </div>
-            <button className="btn btn-primary" onClick={() => setAddingAsin(true)} disabled={!selectedSku}>
-              <IPlus size={13}/><span>{asinType === "target" ? "타겟 ASIN 추가" : "네거티브 ASIN 추가"}</span>
-            </button>
-          </div>
-
-          {/* Negative helper text */}
-          {asinType === "negative" && (
-            <div style={{padding:"8px 16px",background:"rgba(255,59,48,.06)",borderBottom:"0.5px solid var(--separator)",fontSize:12,color:"var(--fg-secondary)"}}>
-              네거티브 ASIN: 해당 상품 페이지에 광고가 노출되지 않도록 제외합니다.
-            </div>
-          )}
-
-          {/* Add form */}
-          {addingAsin && (
-            <div className="bid-add-row" style={{padding:"12px 16px",borderBottom:"0.5px solid var(--separator)"}}>
-              <input className="input" placeholder="ASIN (예: B0XXXXXX)" style={{width:150}} value={asinDraft.asin}
-                     onChange={(e) => setAsinDraft({...asinDraft, asin: e.target.value})}/>
-              <input className="input" placeholder="상품명 (선택)" style={{flex:2}} value={asinDraft.title}
-                     onChange={(e) => setAsinDraft({...asinDraft, title: e.target.value})}/>
-              {asinType === "target" && (
-                <input className="input" type="number" step="0.01" placeholder="입찰가 ($)" style={{width:110}} value={asinDraft.bid}
-                       onChange={(e) => setAsinDraft({...asinDraft, bid: e.target.value})}/>
-              )}
-              <input className="input" placeholder="메모 (선택)" style={{flex:2}} value={asinDraft.note}
-                     onChange={(e) => setAsinDraft({...asinDraft, note: e.target.value})}/>
-              <button className="btn" onClick={() => setAddingAsin(false)}>취소</button>
-              <button className="btn btn-primary" onClick={addAsin}>추가</button>
-            </div>
-          )}
-
-          <table className="table">
-            <thead>
-              <tr>
-                <th style={{width:140}}>ASIN</th>
-                <th>상품명</th>
-                {asinType === "target" && <th className="num" style={{width:100}}>입찰가</th>}
-                <th style={{width:90}}>상태</th>
-                <th>메모</th>
-                <th style={{width:50}}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {displayedAsins.map(a => (
-                <tr key={a.id} style={{opacity: a.status === "paused" ? 0.5 : 1}}>
-                  <td><code style={{fontFamily:"var(--font-mono)",fontSize:12}}>{a.asin}</code></td>
-                  <td style={{color:"var(--fg-secondary)",fontSize:12.5}}>{a.title || <span style={{color:"var(--fg-quaternary)"}}>—</span>}</td>
-                  {asinType === "target" && (
-                    <td className="num" style={{fontWeight:600}}>${parseFloat(a.bid).toFixed(2)}</td>
-                  )}
-                  <td>
-                    <button className={`pill ${a.status === "active" ? "green" : "gray"}`}
-                            style={{cursor:"pointer",border:"none",background:"none",padding:0}}
-                            title="클릭하여 상태 전환"
-                            onClick={() => toggleAsinStatus(a.id)}>
-                      {a.status}
-                    </button>
-                  </td>
-                  <td style={{color:"var(--fg-secondary)",fontSize:12.5}}>{a.note || <span style={{color:"var(--fg-quaternary)"}}>—</span>}</td>
-                  <td>
-                    <button className="icon-btn" onClick={() => removeAsin(a.id)} style={{width:24,height:24,color:"var(--fg-tertiary)"}}>
-                      <svg width="12" height="12" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M5 5l8 8M13 5l-8 8"/></svg>
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {displayedAsins.length === 0 && (
-                <tr><td colSpan={asinType === "target" ? 6 : 5} style={{textAlign:"center",padding:"36px 0",color:"var(--fg-tertiary)"}}>
-                  {selectedSku
-                    ? (asinType === "target" ? "등록된 타겟 ASIN이 없습니다." : "등록된 네거티브 ASIN이 없습니다.")
-                    : "SKU를 먼저 선택하세요."}
-                </td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {activeTab === "keywords" && (selKw ? kwDetail : kwList)}
+      {activeTab === "asins"    && (selAsin ? asinDetail : asinList)}
     </div>
   );
 }
+
