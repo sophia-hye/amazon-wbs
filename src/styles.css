@@ -1534,6 +1534,7 @@ button { font: inherit; color: inherit; }
 .sim-in {
   padding: 3px 6px;
   background: var(--accent-bg);
+  text-align: right;
 }
 .sim-input-row td { background: var(--accent-bg); }
 .sim-input-row:hover td { background: rgba(0,122,255,0.08) !important; }
