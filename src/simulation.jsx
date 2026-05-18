@@ -173,7 +173,7 @@ function SimChart({ calc }) {
     cumProfit: c.cumProfit,
   }))
 
-  const allV   = data.flatMap((d) => [d.revenue, d.adSpend, d.profit])
+  const allV   = data.flatMap((d) => [d.revenue, d.adSpend, d.profit, d.cumProfit])
   const rawMin = Math.min(...allV)
   const rawMax = Math.max(...allV)
   const vPad   = (rawMax - rawMin) * 0.12 || 500
@@ -226,10 +226,15 @@ function SimChart({ calc }) {
       <div style={{ position: 'relative' }}>
         <svg
           viewBox={`0 0 ${CHART_W} ${CHART_H}`}
-          style={{ width: '100%', height: 'auto', display: 'block', overflow: 'visible' }}
+          style={{ width: '100%', height: 'auto', display: 'block' }}
           onMouseMove={handleMouseMove}
           onMouseLeave={() => setHovIdx(null)}
         >
+          <defs>
+            <clipPath id="sim-chart-clip">
+              <rect x={PL} y={PT} width={CW} height={CH} />
+            </clipPath>
+          </defs>
           {/* Y grid + labels */}
           {ticks.map((t) => {
             const y = yOf(t)
@@ -261,22 +266,24 @@ function SimChart({ calc }) {
           ))}
 
           {/* Lines */}
-          {CHART_SERIES.map((s) => (
-            <path key={s.key} d={linePath(s.key)}
-              fill="none" stroke={s.color} strokeWidth={2.5}
-              strokeLinejoin="round" strokeLinecap="round" />
-          ))}
+          <g clipPath="url(#sim-chart-clip)">
+            {CHART_SERIES.map((s) => (
+              <path key={s.key} d={linePath(s.key)}
+                fill="none" stroke={s.color} strokeWidth={2.5}
+                strokeLinejoin="round" strokeLinecap="round" />
+            ))}
 
-          {/* Dots */}
-          {CHART_SERIES.map((s) =>
-            data.map((d, i) => (
-              <circle key={`${s.key}-${i}`}
-                cx={xOf(i)} cy={yOf(d[s.key])}
-                r={hovIdx === i ? 5 : 3.5}
-                fill={hovIdx === i ? s.color : 'var(--bg-elev-2)'}
-                stroke={s.color} strokeWidth={1.5} />
-            ))
-          )}
+            {/* Dots */}
+            {CHART_SERIES.map((s) =>
+              data.map((d, i) => (
+                <circle key={`${s.key}-${i}`}
+                  cx={xOf(i)} cy={yOf(d[s.key])}
+                  r={hovIdx === i ? 5 : 3.5}
+                  fill={hovIdx === i ? s.color : 'var(--bg-elev-2)'}
+                  stroke={s.color} strokeWidth={1.5} />
+              ))
+            )}
+          </g>
 
           {/* Hover line */}
           {hovIdx !== null && (
