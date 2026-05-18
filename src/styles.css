@@ -1431,7 +1431,7 @@ button { font: inherit; color: inherit; }
 /* ══════════════════════════════════════════════════════
    Simulation Page
 ══════════════════════════════════════════════════════ */
-.simulation-page { display: flex; flex-direction: column; gap: 0; }
+.simulation-page { display: block; }
 
 /* Fee settings panel */
 .sim-settings {
@@ -1465,7 +1465,7 @@ button { font: inherit; color: inherit; }
 
 /* Table wrapper */
 .sim-scroll {
-  flex: 1; overflow: auto;
+  overflow-x: auto;
   border: 0.5px solid var(--separator);
   border-radius: var(--radius);
 }
