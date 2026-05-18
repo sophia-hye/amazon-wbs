@@ -102,7 +102,24 @@ CREATE TABLE IF NOT EXISTS campaigns (
 CREATE INDEX IF NOT EXISTS campaigns_sku_idx ON campaigns(sku);
 
 -- ============================================================
--- 7. Weekly wrap-ups
+-- 7. Daily sales metrics  (SKU × date granularity)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS daily_metrics (
+  id          UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+  date        DATE    NOT NULL,
+  sku         TEXT    REFERENCES skus(sku) ON DELETE CASCADE,
+  sales       NUMERIC DEFAULT 0,
+  orders      INT     DEFAULT 0,
+  acos        NUMERIC DEFAULT 0,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(date, sku)
+);
+CREATE INDEX IF NOT EXISTS daily_metrics_date_idx ON daily_metrics(date DESC);
+CREATE INDEX IF NOT EXISTS daily_metrics_sku_idx  ON daily_metrics(sku);
+
+-- ============================================================
+-- 8. Weekly wrap-ups
 -- ============================================================
 CREATE TABLE IF NOT EXISTS weekly_wraps (
   week_key      TEXT PRIMARY KEY,                 -- e.g. '2026-W19'
@@ -142,7 +159,7 @@ DECLARE
 BEGIN
   FOR t IN SELECT unnest(ARRAY[
     'wbs_tasks','task_done','logs','events','skus',
-    'campaigns','weekly_wraps','profile'
+    'campaigns','daily_metrics','weekly_wraps','profile'
   ])
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY;', t);
@@ -162,7 +179,7 @@ END $$;
 CREATE OR REPLACE FUNCTION truncate_all_user_data() RETURNS void AS $$
 BEGIN
   TRUNCATE
-    wbs_tasks, task_done, logs, events, skus, campaigns, weekly_wraps
+    wbs_tasks, task_done, logs, events, skus, campaigns, daily_metrics, weekly_wraps
   RESTART IDENTITY CASCADE;
   UPDATE profile SET name = '', role = '', market = 'Amazon US' WHERE id = 1;
 END;
@@ -186,7 +203,7 @@ DECLARE
 BEGIN
   FOR t IN SELECT unnest(ARRAY[
     'wbs_tasks','task_done','logs','skus',
-    'campaigns','weekly_wraps','profile'
+    'campaigns','daily_metrics','weekly_wraps','profile'
   ])
   LOOP
     EXECUTE format('DROP TRIGGER IF EXISTS %I_touch ON %I;', t, t);

@@ -37,3 +37,4 @@ export const IPPC = (p) => <Icon {...p}><circle cx="9" cy="9" r="6.5"/><path d="
 export const IWeek = (p) => <Icon {...p}><rect x="2.5" y="3.5" width="13" height="11" rx="1.5"/><path d="M2.5 7H15.5"/><rect x="5" y="9" width="2" height="2" fill="currentColor" stroke="none"/><rect x="8" y="9" width="2" height="2" fill="currentColor" stroke="none"/><rect x="11" y="9" width="2" height="2" fill="currentColor" stroke="none"/></Icon>;
 export const ISettings = (p) => <Icon {...p}><circle cx="9" cy="9" r="2.5"/><path d="M9 1.5v2M9 14.5v2M1.5 9h2M14.5 9h2M3.5 3.5l1.5 1.5M13 13l1.5 1.5M3.5 14.5L5 13M13 5l1.5-1.5"/></Icon>;
 export const IClose = (p) => <Icon {...p}><path d="M5 5l8 8M13 5l-8 8"/></Icon>;
+export const ISales = (p) => <Icon {...p}><rect x="2.5" y="3.5" width="13" height="11" rx="1.5"/><path d="M2.5 7.5H15.5M2.5 11H15.5M7 3.5v11"/></Icon>;

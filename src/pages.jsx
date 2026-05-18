@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import {
   IFilter, IPlus, IChev, IChevD, IChevL, IChevR, ICheck,
-  IDollar, ICart, ITrend, ILog,
+  IDollar, ICart, ITrend, ILog, ISales,
 } from './icons.jsx'
 import { todayISO } from './usePersisted.js'
 
@@ -1368,4 +1368,168 @@ ${weekLogs.map(l => `[${l.date}] ${l.title}
       </div>
     </div>
   );
+}
+
+// ===== DAILY SALES =====
+const isoFromDate = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+
+export function DailySalesPage({ skus, dailySales, setDailySales }) {
+  const [date, setDate] = useState(todayISO)
+
+  const shiftDay = (delta) => {
+    const d = new Date(date)
+    d.setDate(d.getDate() + delta)
+    setDate(isoFromDate(d))
+  }
+
+  // 이 날짜의 기존 행들
+  const todayRows = dailySales.filter(r => r.date === date)
+
+  const getVal = (sku, field) => {
+    const row = todayRows.find(r => r.sku === sku)
+    return row ? (row[field] || '') : ''
+  }
+
+  const updateCell = (sku, field, raw) => {
+    const num = field === 'orders' ? parseInt(raw) || 0 : parseFloat(raw) || 0
+    const existing = dailySales.find(r => r.date === date && r.sku === sku)
+    if (existing) {
+      setDailySales(prev => prev.map(r => r.id === existing.id ? { ...r, [field]: num } : r))
+    } else {
+      const id = (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : `dm${Date.now()}`
+      setDailySales(prev => [...prev, { id, date, sku, sales: 0, orders: 0, acos: 0, [field]: num }])
+    }
+  }
+
+  // 오늘 합계
+  const totals = skus.reduce(
+    (acc, s) => {
+      const row = todayRows.find(r => r.sku === s.sku)
+      return {
+        sales:   acc.sales   + (row?.sales   || 0),
+        orders:  acc.orders  + (row?.orders  || 0),
+        acosSum: acc.acosSum + (row?.acos    || 0),
+        acosN:   acc.acosN   + (row?.acos ? 1 : 0),
+      }
+    },
+    { sales: 0, orders: 0, acosSum: 0, acosN: 0 }
+  )
+  const avgAcos = totals.acosN ? totals.acosSum / totals.acosN : 0
+
+  // 이번 주 합계
+  const weekStart = getWeekStart(date)
+  const weekEnd   = getWeekEnd(weekStart)
+  const weekRows  = dailySales.filter(r => r.date >= weekStart && r.date <= weekEnd)
+  const weekSales  = weekRows.reduce((a, r) => a + (r.sales  || 0), 0)
+  const weekOrders = weekRows.reduce((a, r) => a + (r.orders || 0), 0)
+  const filledDays = new Set(weekRows.filter(r => r.sales || r.orders).map(r => r.date)).size
+
+  // 날짜 표시
+  const dateObj  = new Date(date)
+  const dowLabel = ["일","월","화","수","목","금","토"][dateObj.getDay()]
+  const dateLabel = `${dateObj.getFullYear()}.${String(dateObj.getMonth()+1).padStart(2,'0')}.${String(dateObj.getDate()).padStart(2,'0')} (${dowLabel})`
+
+  return (
+    <div className="page">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Daily Sales</h1>
+          <p className="page-subtitle">SKU별 일별 실적 입력 · {skus.length}개 SKU</p>
+        </div>
+        <div className="page-actions">
+          <button className="icon-btn" onClick={() => shiftDay(-1)}><IChevL size={14}/></button>
+          <input className="input" type="date" value={date}
+                 onChange={e => setDate(e.target.value)}
+                 style={{width: 148}}/>
+          <button className="btn" onClick={() => setDate(todayISO())}>오늘</button>
+          <button className="icon-btn" onClick={() => shiftDay(1)}><IChevR size={14}/></button>
+        </div>
+      </div>
+
+      <div className="kpi-grid" style={{gridTemplateColumns:"repeat(4, 1fr)"}}>
+        <div className="kpi">
+          <div className="kpi-label"><span className="ic"><IDollar size={14}/></span><span>오늘 매출</span></div>
+          <div className="kpi-value">{fmtMoney(totals.sales)}</div>
+          <div className="kpi-meta"><span>{dateLabel}</span></div>
+        </div>
+        <div className="kpi">
+          <div className="kpi-label"><span className="ic" style={{background:"rgba(175,82,222,.12)",color:"var(--purple)"}}><ICart size={14}/></span><span>오늘 주문</span></div>
+          <div className="kpi-value">{fmtNum(totals.orders)}</div>
+          <div className="kpi-meta"><span>총 주문 건수</span></div>
+        </div>
+        <div className="kpi">
+          <div className="kpi-label"><span className="ic" style={{background:"rgba(255,149,0,.12)",color:"var(--orange)"}}><ITrend size={14}/></span><span>평균 ACoS</span></div>
+          <div className="kpi-value">{avgAcos.toFixed(1)}<span style={{fontSize:18,color:"var(--fg-tertiary)",fontWeight:500}}>%</span></div>
+          <div className="kpi-meta"><span>입력된 SKU 기준</span></div>
+        </div>
+        <div className="kpi">
+          <div className="kpi-label"><span className="ic" style={{background:"rgba(52,199,89,.12)",color:"var(--green)"}}><ISales size={14}/></span><span>주간 매출</span></div>
+          <div className="kpi-value">{fmtMoney(weekSales)}</div>
+          <div className="kpi-meta"><span>이번 주 {filledDays}일 / 주문 {fmtNum(weekOrders)}건</span></div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="section-title">
+          <h2>{dateLabel} · SKU별 실적</h2>
+          <span className="meta">{todayRows.filter(r => r.sales || r.orders).length}개 SKU 입력됨</span>
+        </div>
+
+        {skus.length === 0 ? (
+          <div className="empty-state" style={{marginTop:0}}>
+            좌측 <strong>SKUs</strong> 메뉴에서 SKU를 먼저 등록하세요.
+          </div>
+        ) : (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>SKU</th>
+                <th>제품명</th>
+                <th className="num">매출 ($)</th>
+                <th className="num">주문</th>
+                <th className="num">ACoS (%)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {skus.map(s => (
+                <tr key={s.sku}>
+                  <td style={{fontFamily:"var(--font-mono)",fontSize:12}}>{s.sku}</td>
+                  <td style={{color:"var(--fg-secondary)"}}>{s.name}</td>
+                  <td className="num">
+                    <input className="input cell-input" type="number" min="0" step="0.01"
+                           placeholder="0"
+                           value={getVal(s.sku, 'sales')}
+                           onChange={e => updateCell(s.sku, 'sales', e.target.value)}/>
+                  </td>
+                  <td className="num">
+                    <input className="input cell-input" type="number" min="0"
+                           placeholder="0"
+                           value={getVal(s.sku, 'orders')}
+                           onChange={e => updateCell(s.sku, 'orders', e.target.value)}/>
+                  </td>
+                  <td className="num">
+                    <input className="input cell-input" type="number" min="0" step="0.1"
+                           placeholder="0"
+                           value={getVal(s.sku, 'acos')}
+                           onChange={e => updateCell(s.sku, 'acos', e.target.value)}/>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="sales-total-row">
+                <td colSpan="2" style={{fontWeight:600,fontSize:12,color:"var(--fg-secondary)"}}>합계</td>
+                <td className="num" style={{fontWeight:600}}>{fmtMoney(totals.sales)}</td>
+                <td className="num" style={{fontWeight:600}}>{fmtNum(totals.orders)}</td>
+                <td className="num" style={{color:"var(--fg-tertiary)"}}>{avgAcos.toFixed(1)}%</td>
+              </tr>
+            </tfoot>
+          </table>
+        )}
+      </div>
+    </div>
+  )
 }

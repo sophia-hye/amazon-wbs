@@ -1,8 +1,8 @@
 import {
-  IDashboard, IWBS, ICalendar, ILog, IWeek, ISKU, IPPC,
+  IDashboard, IWBS, ICalendar, ILog, IWeek, ISKU, IPPC, ISales,
   ISidebar, ISearch, ISun, IMoon, IBell,
 } from './icons.jsx'
-import { DashboardPage, WBSPage, CalendarPage, DailyLogPage } from './pages.jsx'
+import { DashboardPage, WBSPage, CalendarPage, DailyLogPage, DailySalesPage } from './pages.jsx'
 import { SKUPage, PPCPage } from './sku-ppc.jsx'
 import {
   TweaksPanel, TweakSection, TweakToggle, TweakColor, TweakRadio, TweakSlider,
@@ -33,8 +33,9 @@ const NAV_DEFS = [
   { id: 'weekly',    label: 'Weekly Log', icon: IWeek },
 ]
 const NAV2_DEFS = [
-  { id: 'sku', label: 'SKUs',    icon: ISKU },
-  { id: 'ppc', label: 'PPC Ads', icon: IPPC },
+  { id: 'sku',         label: 'SKUs',         icon: ISKU  },
+  { id: 'ppc',         label: 'PPC Ads',       icon: IPPC  },
+  { id: 'daily-sales', label: 'Daily Sales',   icon: ISales },
 ]
 
 // ---- Field mappers (module-level → stable references) ----
@@ -107,6 +108,28 @@ const campaignFromRow = (r) => ({
   bids: r.bids || [],
 })
 
+const dailySalesToRow = (r) => ({
+  id:     r.id,
+  date:   r.date,
+  sku:    r.sku,
+  sales:  Number(r.sales)  || 0,
+  orders: Number(r.orders) || 0,
+  acos:   Number(r.acos)   || 0,
+})
+const dailySalesFromRow = (r) => ({
+  id:     r.id,
+  date:   r.date,
+  sku:    r.sku,
+  sales:  Number(r.sales)  || 0,
+  orders: Number(r.orders) || 0,
+  acos:   Number(r.acos)   || 0,
+})
+const DAILY_SALES_OPTIONS = {
+  orderBy: { column: 'date', ascending: false },
+  toRow:   dailySalesToRow,
+  fromRow: dailySalesFromRow,
+}
+
 const SKU_TABLE_OPTIONS = { idField: 'sku' }
 const LOGS_TABLE_OPTIONS = {
   orderBy: { column: 'date', ascending: false },
@@ -152,6 +175,7 @@ export default function App() {
   const [events, setEvents] = useSupabaseTable('events', EVENTS_TABLE_OPTIONS)
   const [skus, setSkus] = useSupabaseTable('skus', SKU_TABLE_OPTIONS)
   const [campaigns, setCampaigns] = useSupabaseTable('campaigns', CAMPAIGNS_TABLE_OPTIONS)
+  const [dailySales, setDailySales] = useSupabaseTable('daily_metrics', DAILY_SALES_OPTIONS)
   const [wraps, setWraps] = useSupabaseWraps()
   const [profile, setProfile] = useSupabaseSingleRow('profile', { id: 1 }, PROFILE_DEFAULTS)
 
@@ -202,8 +226,9 @@ export default function App() {
     weekly:    <DailyLogPage logs={logs} setLogs={setLogs} wbs={wbs}
                               doneMap={doneMap} setDoneMap={setDoneMap}
                               wraps={wraps} setWraps={setWraps} initialView="weekly" />,
-    sku:       <SKUPage skus={skus} setSkus={setSkus} />,
-    ppc:       <PPCPage campaigns={campaigns} setCampaigns={setCampaigns} skus={skus} />,
+    sku:          <SKUPage skus={skus} setSkus={setSkus} />,
+    ppc:          <PPCPage campaigns={campaigns} setCampaigns={setCampaigns} skus={skus} />,
+    'daily-sales': <DailySalesPage skus={skus} dailySales={dailySales} setDailySales={setDailySales} />,
   }[tab]
 
   const crumb = [...NAV, ...NAV2].find((n) => n.id === tab)?.label || ''
