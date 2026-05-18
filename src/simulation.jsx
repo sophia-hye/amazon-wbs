@@ -5,18 +5,18 @@ const MONTHS = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','
 // Per-month editable inputs
 // paidRatio: 유료광고 매출비율 (%) — primary driver; paidUnits is derived
 const INITIAL_INPUTS = [
-  { aov: 14.99, targetUnits: 0,    paidRatio: 90, acos: 130, opex: 0    },
-  { aov: 14.99, targetUnits: 0,    paidRatio: 90, acos: 130, opex: 0    },
-  { aov: 14.99, targetUnits: 0,    paidRatio: 90, acos: 130, opex: 0    },
-  { aov: 14.99, targetUnits: 0,    paidRatio: 90, acos: 130, opex: 0    },
-  { aov: 14.99, targetUnits: 150,  paidRatio: 85, acos: 120, opex: 2200 },
-  { aov: 14.99, targetUnits: 500,  paidRatio: 80, acos: 110, opex: 700  },
-  { aov: 14.99, targetUnits: 650,  paidRatio: 75, acos: 95,  opex: 700  },
-  { aov: 16.99, targetUnits: 700,  paidRatio: 70, acos: 80,  opex: 700  },
-  { aov: 17.99, targetUnits: 750,  paidRatio: 65, acos: 75,  opex: 700  },
-  { aov: 15.99, targetUnits: 950,  paidRatio: 60, acos: 70,  opex: 700  },
-  { aov: 13.99, targetUnits: 1100, paidRatio: 55, acos: 65,  opex: 700  },
-  { aov: 14.99, targetUnits: 1250, paidRatio: 50, acos: 60,  opex: 700  },
+  { aov: 14.99, targetUnits: 0,    fbqty: 0,    paidRatio: 90, acos: 130, opex: 0    },
+  { aov: 14.99, targetUnits: 0,    fbqty: 0,    paidRatio: 90, acos: 130, opex: 0    },
+  { aov: 14.99, targetUnits: 0,    fbqty: 0,    paidRatio: 90, acos: 130, opex: 0    },
+  { aov: 14.99, targetUnits: 0,    fbqty: 0,    paidRatio: 90, acos: 130, opex: 0    },
+  { aov: 14.99, targetUnits: 150,  fbqty: 173,  paidRatio: 85, acos: 120, opex: 2200 },
+  { aov: 14.99, targetUnits: 500,  fbqty: 575,  paidRatio: 80, acos: 110, opex: 700  },
+  { aov: 14.99, targetUnits: 650,  fbqty: 748,  paidRatio: 75, acos: 95,  opex: 700  },
+  { aov: 16.99, targetUnits: 700,  fbqty: 805,  paidRatio: 70, acos: 80,  opex: 700  },
+  { aov: 17.99, targetUnits: 750,  fbqty: 863,  paidRatio: 65, acos: 75,  opex: 700  },
+  { aov: 15.99, targetUnits: 950,  fbqty: 1093, paidRatio: 60, acos: 70,  opex: 700  },
+  { aov: 13.99, targetUnits: 1100, fbqty: 1265, paidRatio: 55, acos: 65,  opex: 700  },
+  { aov: 14.99, targetUnits: 1250, fbqty: 1438, paidRatio: 50, acos: 60,  opex: 700  },
 ]
 
 // Unit rates & fee parameters (global settings)
@@ -47,7 +47,7 @@ function calcAll(inputs, rates) {
     const m = inputs[i]
 
     // ── 예상 목표
-    const fbqty         = Math.round(m.targetUnits * rates.inboundRatio / 100)
+    const fbqty         = m.fbqty
     const targetRevenue = m.aov * m.targetUnits
 
     // ── 유료 매출
@@ -461,9 +461,9 @@ export function SimulationPage() {
               <td className="sim-lbl">아마존 소비자 가격 (AOV, $)</td>
               {inputs.map((_, i) => <InputCell key={i} {...ic(i, 'aov', { prefix: '$', step: '0.01' })} />)}
             </tr>
-            <tr>
-              <td className="sim-lbl sim-calc-lbl">FBA 입고 수량 (목표 × {rates.inboundRatio}%)</td>
-              {calc.map((c, i) => <ValCell key={i} v={c.fbqty} fmt={fN} />)}
+            <tr className="sim-input-row">
+              <td className="sim-lbl">FBA 입고 수량 (개)</td>
+              {inputs.map((_, i) => <InputCell key={i} {...ic(i, 'fbqty', { suffix: '개', step: '1', min: '0' })} />)}
             </tr>
             <tr className="sim-input-row">
               <td className="sim-lbl">목표 월간판매량 (개)</td>
