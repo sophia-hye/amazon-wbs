@@ -105,12 +105,15 @@ function calcAll(inputs, rates) {
                                 + rates.packaging
     const inventoryCash = fbqty * landedCostPerInbound
 
-    // ── 단위경제 (광고·고정비 제외)
-    const contributionMargin   = m.aov * (1 - refRate - commRate)
-                                 - rates.fbaFee - rates.cogs - rates.packaging
-    const adSpendPerUnit       = m.targetUnits > 0 ? adSpend / m.targetUnits : 0
-    const contributionAfterAd  = contributionMargin - adSpendPerUnit
-    const breakEvenAcos        = m.aov > 0 ? Math.max(0, contributionMargin) / m.aov : 0
+    // ── 단위경제 (광고·고정비 제외) — 판매량 0이면 미운영 월로 간주, 전부 0
+    const contributionMargin  = m.targetUnits > 0
+      ? m.aov * (1 - refRate - commRate) - rates.fbaFee - rates.cogs - rates.packaging
+      : 0
+    const adSpendPerUnit      = m.targetUnits > 0 ? adSpend / m.targetUnits : 0
+    const contributionAfterAd = m.targetUnits > 0 ? contributionMargin - adSpendPerUnit : 0
+    const breakEvenAcos       = m.targetUnits > 0 && m.aov > 0
+      ? Math.max(0, contributionMargin) / m.aov
+      : 0
 
     results.push({
       fbqty, targetRevenue,
