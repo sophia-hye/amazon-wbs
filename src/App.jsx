@@ -157,6 +157,7 @@ const keywordToRow = (k) => ({
   bid: Number(k.bid) || 0,
   status: k.status || 'active',
   note: k.note || '',
+  keyword_type: k.keyword_type || 'positive',
 })
 const keywordFromRow = (r) => ({
   id: r.id,
@@ -166,6 +167,7 @@ const keywordFromRow = (r) => ({
   bid: Number(r.bid) || 0,
   status: r.status || 'active',
   note: r.note || '',
+  keyword_type: r.keyword_type || 'positive',
 })
 const KEYWORDS_OPTIONS = {
   orderBy: { column: 'keyword', ascending: true },
@@ -181,6 +183,7 @@ const targetingAsinToRow = (a) => ({
   bid: Number(a.bid) || 0,
   status: a.status || 'active',
   note: a.note || '',
+  asin_type: a.asin_type || 'target',
 })
 const targetingAsinFromRow = (r) => ({
   id: r.id,
@@ -190,6 +193,7 @@ const targetingAsinFromRow = (r) => ({
   bid: Number(r.bid) || 0,
   status: r.status || 'active',
   note: r.note || '',
+  asin_type: r.asin_type || 'target',
 })
 const TARGETING_ASINS_OPTIONS = {
   orderBy: { column: 'asin', ascending: true },

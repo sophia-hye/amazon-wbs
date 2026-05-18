@@ -590,20 +590,23 @@ export function PPCPage({ campaigns, setCampaigns, skus }) {
 }
 
 // ===== TARGETING: Keyword + Ad ASIN management per SKU =====
-const MATCH_COLORS = { Exact: "blue", Phrase: "orange", Broad: "gray" };
+// Positive keyword match types (all three standard Amazon SP types)
+// Negative keyword match types (Broad not supported by Amazon SP)
+const POS_MATCH_COLORS = { Exact: "blue", Phrase: "orange", Broad: "gray" };
+const NEG_MATCH_COLORS = { Exact: "red", Phrase: "orange" };
 
 export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, setTargetingAsins }) {
   const [selectedSku, setSelectedSku] = useState(skus[0]?.sku || null);
   const [activeTab, setActiveTab] = useState("keywords"); // "keywords" | "asins"
+  const [kwType, setKwType]     = useState("positive");   // "positive" | "negative"
+  const [asinType, setAsinType] = useState("target");     // "target"   | "negative"
 
   // Keyword add form
-  const blankKw = { keyword: "", match_type: "Exact", bid: 1.0, status: "active", note: "" };
-  const [kwDraft, setKwDraft] = useState(blankKw);
+  const [kwDraft, setKwDraft] = useState({ keyword: "", match_type: "Exact", bid: 1.0, note: "" });
   const [addingKw, setAddingKw] = useState(false);
 
   // ASIN add form
-  const blankAsin = { asin: "", title: "", bid: 1.0, status: "active", note: "" };
-  const [asinDraft, setAsinDraft] = useState(blankAsin);
+  const [asinDraft, setAsinDraft] = useState({ asin: "", title: "", bid: 1.0, note: "" });
   const [addingAsin, setAddingAsin] = useState(false);
 
   React.useEffect(() => {
@@ -611,22 +614,43 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
   }, [skus, selectedSku]);
 
   React.useEffect(() => { setAddingKw(false); setAddingAsin(false); }, [selectedSku]);
+  React.useEffect(() => { setAddingKw(false); setKwDraft({ keyword: "", match_type: "Exact", bid: 1.0, note: "" }); }, [kwType]);
+  React.useEffect(() => { setAddingAsin(false); setAsinDraft({ asin: "", title: "", bid: 1.0, note: "" }); }, [asinType]);
 
-  const skuObj = skus.find(s => s.sku === selectedSku);
+  const skuObj   = skus.find(s => s.sku === selectedSku);
   const skuKws   = keywords.filter(k => k.sku === selectedSku);
   const skuAsins = targetingAsins.filter(a => a.sku === selectedSku);
 
-  const activeKws   = skuKws.filter(k => k.status === "active");
-  const activeAsins = skuAsins.filter(a => a.status === "active");
-  const avgKwBid   = activeKws.length ? activeKws.reduce((s, k) => s + k.bid, 0) / activeKws.length : 0;
-  const avgAsinBid = activeAsins.length ? activeAsins.reduce((s, a) => s + a.bid, 0) / activeAsins.length : 0;
+  const positiveKws   = skuKws.filter(k => (k.keyword_type || "positive") === "positive");
+  const negativeKws   = skuKws.filter(k => k.keyword_type === "negative");
+  const targetAsins   = skuAsins.filter(a => (a.asin_type || "target") === "target");
+  const negativeAsins = skuAsins.filter(a => a.asin_type === "negative");
 
-  const newId = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : "id" + Date.now();
+  const displayedKws   = kwType   === "positive" ? positiveKws  : negativeKws;
+  const displayedAsins = asinType === "target"   ? targetAsins  : negativeAsins;
+
+  const activePosKws     = positiveKws.filter(k => k.status === "active");
+  const activeTargetAsins = targetAsins.filter(a => a.status === "active");
+  const avgKwBid   = activePosKws.length     ? activePosKws.reduce((s, k) => s + k.bid, 0)     / activePosKws.length     : 0;
+  const avgAsinBid = activeTargetAsins.length ? activeTargetAsins.reduce((s, a) => s + a.bid, 0) / activeTargetAsins.length : 0;
+
+  const POSITIVE_MATCH_TYPES = ["Exact", "Phrase", "Broad"];
+  const NEGATIVE_MATCH_TYPES = ["Exact", "Phrase"]; // Amazon SP: Negative Broad is not supported
+
+  const newId = () => (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : "id" + Date.now();
 
   const addKeyword = () => {
     if (!selectedSku || !kwDraft.keyword.trim()) return;
-    setKeywords([...keywords, { id: newId(), sku: selectedSku, ...kwDraft, bid: parseFloat(kwDraft.bid) || 0 }]);
-    setKwDraft(blankKw);
+    setKeywords([...keywords, {
+      id: newId(), sku: selectedSku,
+      keyword: kwDraft.keyword,
+      match_type: kwDraft.match_type,
+      bid: kwType === "negative" ? 0 : parseFloat(kwDraft.bid) || 0,
+      status: "active",
+      note: kwDraft.note,
+      keyword_type: kwType,
+    }]);
+    setKwDraft({ keyword: "", match_type: "Exact", bid: 1.0, note: "" });
     setAddingKw(false);
   };
   const toggleKwStatus = (id) => setKeywords(keywords.map(k => k.id === id ? { ...k, status: k.status === "active" ? "paused" : "active" } : k));
@@ -634,12 +658,27 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
 
   const addAsin = () => {
     if (!selectedSku || !asinDraft.asin.trim()) return;
-    setTargetingAsins([...targetingAsins, { id: newId(), sku: selectedSku, ...asinDraft, bid: parseFloat(asinDraft.bid) || 0 }]);
-    setAsinDraft(blankAsin);
+    setTargetingAsins([...targetingAsins, {
+      id: newId(), sku: selectedSku,
+      asin: asinDraft.asin,
+      title: asinDraft.title,
+      bid: asinType === "negative" ? 0 : parseFloat(asinDraft.bid) || 0,
+      status: "active",
+      note: asinDraft.note,
+      asin_type: asinType,
+    }]);
+    setAsinDraft({ asin: "", title: "", bid: 1.0, note: "" });
     setAddingAsin(false);
   };
   const toggleAsinStatus = (id) => setTargetingAsins(targetingAsins.map(a => a.id === id ? { ...a, status: a.status === "active" ? "paused" : "active" } : a));
   const removeAsin = (id) => { if (!confirm("광고 ASIN을 삭제하시겠습니까?")) return; setTargetingAsins(targetingAsins.filter(a => a.id !== id)); };
+
+  const matchPill = (match_type, keyword_type) => {
+    const isNeg = keyword_type === "negative";
+    const color = isNeg ? (NEG_MATCH_COLORS[match_type] || "red") : (POS_MATCH_COLORS[match_type] || "gray");
+    const label = isNeg ? `-${match_type}` : match_type;
+    return <span className={`pill ${color}`}>{label}</span>;
+  };
 
   if (skus.length === 0) {
     return (
@@ -663,7 +702,7 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
       <div className="page-header">
         <div>
           <h1 className="page-title">Targeting</h1>
-          <p className="page-subtitle">SKU별 키워드 · 광고 ASIN 관리 · {skus.length}개 SKU</p>
+          <p className="page-subtitle">SKU별 타겟 · 네거티브 키워드 / 광고 ASIN 관리 · {skus.length}개 SKU</p>
         </div>
       </div>
 
@@ -675,9 +714,7 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
                   onChange={(e) => setSelectedSku(e.target.value || null)}>
             <option value="">— SKU를 선택하세요 —</option>
             {skus.map(s => (
-              <option key={s.sku} value={s.sku}>
-                {s.sku} · {s.name}
-              </option>
+              <option key={s.sku} value={s.sku}>{s.sku} · {s.name}</option>
             ))}
           </select>
           {skuObj && (
@@ -692,29 +729,29 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
       {/* KPI grid */}
       <div className="kpi-grid" style={{gridTemplateColumns:"repeat(4,1fr)"}}>
         <div className="kpi">
-          <div className="kpi-label"><span className="ic"><ITarget size={14}/></span><span>활성 키워드</span></div>
-          <div className="kpi-value">{activeKws.length}<span style={{fontSize:16,color:"var(--fg-tertiary)",fontWeight:500}}>/{skuKws.length}</span></div>
-          <div className="kpi-meta"><span>전체 대비 활성</span></div>
+          <div className="kpi-label"><span className="ic"><ITarget size={14}/></span><span>타겟 키워드</span></div>
+          <div className="kpi-value">{activePosKws.length}<span style={{fontSize:16,color:"var(--fg-tertiary)",fontWeight:500}}>/{positiveKws.length}</span></div>
+          <div className="kpi-meta"><span>활성/전체 · 평균 ${avgKwBid.toFixed(2)}</span></div>
         </div>
         <div className="kpi">
-          <div className="kpi-label"><span className="ic" style={{background:"rgba(0,122,255,.12)",color:"var(--accent)"}}><IDollar size={14}/></span><span>KW 평균 입찰가</span></div>
-          <div className="kpi-value">{activeKws.length ? "$" + avgKwBid.toFixed(2) : "—"}</div>
-          <div className="kpi-meta"><span>활성 키워드 기준</span></div>
+          <div className="kpi-label"><span className="ic" style={{background:"rgba(255,59,48,.12)",color:"var(--red)"}}><ITarget size={14}/></span><span>네거티브 KW</span></div>
+          <div className="kpi-value">{negativeKws.length}</div>
+          <div className="kpi-meta"><span>제외 키워드 수</span></div>
         </div>
         <div className="kpi">
-          <div className="kpi-label"><span className="ic" style={{background:"rgba(52,199,89,.12)",color:"var(--green)"}}><ITarget size={14}/></span><span>활성 광고 ASIN</span></div>
-          <div className="kpi-value">{activeAsins.length}<span style={{fontSize:16,color:"var(--fg-tertiary)",fontWeight:500}}>/{skuAsins.length}</span></div>
-          <div className="kpi-meta"><span>전체 대비 활성</span></div>
+          <div className="kpi-label"><span className="ic" style={{background:"rgba(52,199,89,.12)",color:"var(--green)"}}><ITarget size={14}/></span><span>타겟 ASIN</span></div>
+          <div className="kpi-value">{activeTargetAsins.length}<span style={{fontSize:16,color:"var(--fg-tertiary)",fontWeight:500}}>/{targetAsins.length}</span></div>
+          <div className="kpi-meta"><span>활성/전체 · 평균 ${avgAsinBid.toFixed(2)}</span></div>
         </div>
         <div className="kpi">
-          <div className="kpi-label"><span className="ic" style={{background:"rgba(175,82,222,.12)",color:"var(--purple)"}}><IDollar size={14}/></span><span>ASIN 평균 입찰가</span></div>
-          <div className="kpi-value">{activeAsins.length ? "$" + avgAsinBid.toFixed(2) : "—"}</div>
-          <div className="kpi-meta"><span>활성 ASIN 기준</span></div>
+          <div className="kpi-label"><span className="ic" style={{background:"rgba(255,59,48,.12)",color:"var(--red)"}}><ITarget size={14}/></span><span>네거티브 ASIN</span></div>
+          <div className="kpi-value">{negativeAsins.length}</div>
+          <div className="kpi-meta"><span>제외 ASIN 수</span></div>
         </div>
       </div>
 
-      {/* Tab toggle */}
-      <div className="segmented" style={{alignSelf:"flex-start",marginBottom:2}}>
+      {/* Main tab: Keywords | ASINs */}
+      <div className="segmented" style={{alignSelf:"flex-start"}}>
         <button aria-pressed={activeTab === "keywords"} onClick={() => setActiveTab("keywords")}>
           키워드 ({skuKws.length})
         </button>
@@ -726,24 +763,46 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
       {/* KEYWORDS tab */}
       {activeTab === "keywords" && (
         <div className="card" style={{padding:0,overflow:"hidden"}}>
-          <div style={{padding:"12px 16px",borderBottom:"0.5px solid var(--separator)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <span style={{fontSize:13,fontWeight:500}}>키워드 목록</span>
-            <button className="btn btn-primary" onClick={() => setAddingKw(true)} disabled={!selectedSku}><IPlus size={13}/><span>키워드 추가</span></button>
+          {/* Sub-tab + add button */}
+          <div style={{padding:"10px 16px",borderBottom:"0.5px solid var(--separator)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>
+            <div className="segmented">
+              <button aria-pressed={kwType === "positive"} onClick={() => setKwType("positive")}>
+                타겟 키워드 ({positiveKws.length})
+              </button>
+              <button aria-pressed={kwType === "negative"} onClick={() => setKwType("negative")}>
+                네거티브 ({negativeKws.length})
+              </button>
+            </div>
+            <button className="btn btn-primary" onClick={() => setAddingKw(true)} disabled={!selectedSku}>
+              <IPlus size={13}/><span>{kwType === "positive" ? "타겟 키워드 추가" : "네거티브 추가"}</span>
+            </button>
           </div>
 
+          {/* Negative helper text */}
+          {kwType === "negative" && (
+            <div style={{padding:"8px 16px",background:"rgba(255,59,48,.06)",borderBottom:"0.5px solid var(--separator)",fontSize:12,color:"var(--fg-secondary)"}}>
+              네거티브 키워드: 해당 검색어에 광고가 노출되지 않도록 제외합니다. Broad 매치는 Amazon SP에서 지원하지 않습니다.
+            </div>
+          )}
+
+          {/* Add form */}
           {addingKw && (
             <div className="bid-add-row" style={{padding:"12px 16px",borderBottom:"0.5px solid var(--separator)"}}>
               <input className="input" placeholder="키워드" style={{flex:2,minWidth:140}} value={kwDraft.keyword}
                      onChange={(e) => setKwDraft({...kwDraft, keyword: e.target.value})}/>
               <select className="input" style={{width:110}} value={kwDraft.match_type}
                       onChange={(e) => setKwDraft({...kwDraft, match_type: e.target.value})}>
-                <option>Exact</option><option>Phrase</option><option>Broad</option>
+                {(kwType === "positive" ? POSITIVE_MATCH_TYPES : NEGATIVE_MATCH_TYPES).map(m => (
+                  <option key={m}>{m}</option>
+                ))}
               </select>
-              <input className="input" type="number" step="0.01" placeholder="입찰가 ($)" style={{width:110}} value={kwDraft.bid}
-                     onChange={(e) => setKwDraft({...kwDraft, bid: e.target.value})}/>
+              {kwType === "positive" && (
+                <input className="input" type="number" step="0.01" placeholder="입찰가 ($)" style={{width:110}} value={kwDraft.bid}
+                       onChange={(e) => setKwDraft({...kwDraft, bid: e.target.value})}/>
+              )}
               <input className="input" placeholder="메모 (선택)" style={{flex:2}} value={kwDraft.note}
                      onChange={(e) => setKwDraft({...kwDraft, note: e.target.value})}/>
-              <button className="btn" onClick={() => { setAddingKw(false); setKwDraft(blankKw); }}>취소</button>
+              <button className="btn" onClick={() => setAddingKw(false)}>취소</button>
               <button className="btn btn-primary" onClick={addKeyword}>추가</button>
             </div>
           )}
@@ -752,19 +811,21 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
             <thead>
               <tr>
                 <th>키워드</th>
-                <th style={{width:100}}>매치 타입</th>
-                <th className="num" style={{width:100}}>입찰가</th>
+                <th style={{width:120}}>매치 타입</th>
+                {kwType === "positive" && <th className="num" style={{width:100}}>입찰가</th>}
                 <th style={{width:90}}>상태</th>
                 <th>메모</th>
-                <th style={{width:60}}></th>
+                <th style={{width:50}}></th>
               </tr>
             </thead>
             <tbody>
-              {skuKws.map(k => (
-                <tr key={k.id} style={{opacity: k.status === "paused" ? 0.55 : 1}}>
+              {displayedKws.map(k => (
+                <tr key={k.id} style={{opacity: k.status === "paused" ? 0.5 : 1}}>
                   <td style={{fontWeight:500}}>{k.keyword}</td>
-                  <td><span className={`pill ${MATCH_COLORS[k.match_type] || "gray"}`}>{k.match_type}</span></td>
-                  <td className="num" style={{fontWeight:600}}>${parseFloat(k.bid).toFixed(2)}</td>
+                  <td>{matchPill(k.match_type, k.keyword_type || "positive")}</td>
+                  {kwType === "positive" && (
+                    <td className="num" style={{fontWeight:600}}>${parseFloat(k.bid).toFixed(2)}</td>
+                  )}
                   <td>
                     <button className={`pill ${k.status === "active" ? "green" : "gray"}`}
                             style={{cursor:"pointer",border:"none",background:"none",padding:0}}
@@ -781,9 +842,11 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
                   </td>
                 </tr>
               ))}
-              {skuKws.length === 0 && (
-                <tr><td colSpan="6" style={{textAlign:"center",padding:"36px 0",color:"var(--fg-tertiary)"}}>
-                  {selectedSku ? "등록된 키워드가 없습니다." : "SKU를 먼저 선택하세요."}
+              {displayedKws.length === 0 && (
+                <tr><td colSpan={kwType === "positive" ? 6 : 5} style={{textAlign:"center",padding:"36px 0",color:"var(--fg-tertiary)"}}>
+                  {selectedSku
+                    ? (kwType === "positive" ? "등록된 타겟 키워드가 없습니다." : "등록된 네거티브 키워드가 없습니다.")
+                    : "SKU를 먼저 선택하세요."}
                 </td></tr>
               )}
             </tbody>
@@ -794,22 +857,42 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
       {/* AD ASINs tab */}
       {activeTab === "asins" && (
         <div className="card" style={{padding:0,overflow:"hidden"}}>
-          <div style={{padding:"12px 16px",borderBottom:"0.5px solid var(--separator)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <span style={{fontSize:13,fontWeight:500}}>광고 ASIN 목록</span>
-            <button className="btn btn-primary" onClick={() => setAddingAsin(true)} disabled={!selectedSku}><IPlus size={13}/><span>ASIN 추가</span></button>
+          {/* Sub-tab + add button */}
+          <div style={{padding:"10px 16px",borderBottom:"0.5px solid var(--separator)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>
+            <div className="segmented">
+              <button aria-pressed={asinType === "target"} onClick={() => setAsinType("target")}>
+                타겟 ASIN ({targetAsins.length})
+              </button>
+              <button aria-pressed={asinType === "negative"} onClick={() => setAsinType("negative")}>
+                네거티브 ({negativeAsins.length})
+              </button>
+            </div>
+            <button className="btn btn-primary" onClick={() => setAddingAsin(true)} disabled={!selectedSku}>
+              <IPlus size={13}/><span>{asinType === "target" ? "타겟 ASIN 추가" : "네거티브 ASIN 추가"}</span>
+            </button>
           </div>
 
+          {/* Negative helper text */}
+          {asinType === "negative" && (
+            <div style={{padding:"8px 16px",background:"rgba(255,59,48,.06)",borderBottom:"0.5px solid var(--separator)",fontSize:12,color:"var(--fg-secondary)"}}>
+              네거티브 ASIN: 해당 상품 페이지에 광고가 노출되지 않도록 제외합니다.
+            </div>
+          )}
+
+          {/* Add form */}
           {addingAsin && (
             <div className="bid-add-row" style={{padding:"12px 16px",borderBottom:"0.5px solid var(--separator)"}}>
               <input className="input" placeholder="ASIN (예: B0XXXXXX)" style={{width:150}} value={asinDraft.asin}
                      onChange={(e) => setAsinDraft({...asinDraft, asin: e.target.value})}/>
               <input className="input" placeholder="상품명 (선택)" style={{flex:2}} value={asinDraft.title}
                      onChange={(e) => setAsinDraft({...asinDraft, title: e.target.value})}/>
-              <input className="input" type="number" step="0.01" placeholder="입찰가 ($)" style={{width:110}} value={asinDraft.bid}
-                     onChange={(e) => setAsinDraft({...asinDraft, bid: e.target.value})}/>
+              {asinType === "target" && (
+                <input className="input" type="number" step="0.01" placeholder="입찰가 ($)" style={{width:110}} value={asinDraft.bid}
+                       onChange={(e) => setAsinDraft({...asinDraft, bid: e.target.value})}/>
+              )}
               <input className="input" placeholder="메모 (선택)" style={{flex:2}} value={asinDraft.note}
                      onChange={(e) => setAsinDraft({...asinDraft, note: e.target.value})}/>
-              <button className="btn" onClick={() => { setAddingAsin(false); setAsinDraft(blankAsin); }}>취소</button>
+              <button className="btn" onClick={() => setAddingAsin(false)}>취소</button>
               <button className="btn btn-primary" onClick={addAsin}>추가</button>
             </div>
           )}
@@ -819,18 +902,20 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
               <tr>
                 <th style={{width:140}}>ASIN</th>
                 <th>상품명</th>
-                <th className="num" style={{width:100}}>입찰가</th>
+                {asinType === "target" && <th className="num" style={{width:100}}>입찰가</th>}
                 <th style={{width:90}}>상태</th>
                 <th>메모</th>
-                <th style={{width:60}}></th>
+                <th style={{width:50}}></th>
               </tr>
             </thead>
             <tbody>
-              {skuAsins.map(a => (
-                <tr key={a.id} style={{opacity: a.status === "paused" ? 0.55 : 1}}>
+              {displayedAsins.map(a => (
+                <tr key={a.id} style={{opacity: a.status === "paused" ? 0.5 : 1}}>
                   <td><code style={{fontFamily:"var(--font-mono)",fontSize:12}}>{a.asin}</code></td>
                   <td style={{color:"var(--fg-secondary)",fontSize:12.5}}>{a.title || <span style={{color:"var(--fg-quaternary)"}}>—</span>}</td>
-                  <td className="num" style={{fontWeight:600}}>${parseFloat(a.bid).toFixed(2)}</td>
+                  {asinType === "target" && (
+                    <td className="num" style={{fontWeight:600}}>${parseFloat(a.bid).toFixed(2)}</td>
+                  )}
                   <td>
                     <button className={`pill ${a.status === "active" ? "green" : "gray"}`}
                             style={{cursor:"pointer",border:"none",background:"none",padding:0}}
@@ -847,9 +932,11 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
                   </td>
                 </tr>
               ))}
-              {skuAsins.length === 0 && (
-                <tr><td colSpan="6" style={{textAlign:"center",padding:"36px 0",color:"var(--fg-tertiary)"}}>
-                  {selectedSku ? "등록된 광고 ASIN이 없습니다." : "SKU를 먼저 선택하세요."}
+              {displayedAsins.length === 0 && (
+                <tr><td colSpan={asinType === "target" ? 6 : 5} style={{textAlign:"center",padding:"36px 0",color:"var(--fg-tertiary)"}}>
+                  {selectedSku
+                    ? (asinType === "target" ? "등록된 타겟 ASIN이 없습니다." : "등록된 네거티브 ASIN이 없습니다.")
+                    : "SKU를 먼저 선택하세요."}
                 </td></tr>
               )}
             </tbody>

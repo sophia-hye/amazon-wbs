@@ -122,17 +122,20 @@ CREATE INDEX IF NOT EXISTS daily_metrics_sku_idx  ON daily_metrics(sku);
 -- 8. Targeting — Keywords (SKU × keyword)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS keywords (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  sku         TEXT REFERENCES skus(sku) ON DELETE CASCADE,
-  keyword     TEXT NOT NULL,
-  match_type  TEXT DEFAULT 'Exact',
-  bid         NUMERIC DEFAULT 0,
-  status      TEXT DEFAULT 'active',
-  note        TEXT DEFAULT '',
-  created_at  TIMESTAMPTZ DEFAULT NOW(),
-  updated_at  TIMESTAMPTZ DEFAULT NOW()
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  sku           TEXT REFERENCES skus(sku) ON DELETE CASCADE,
+  keyword       TEXT NOT NULL,
+  match_type    TEXT DEFAULT 'Exact',
+  keyword_type  TEXT DEFAULT 'positive',  -- 'positive' | 'negative'
+  bid           NUMERIC DEFAULT 0,
+  status        TEXT DEFAULT 'active',
+  note          TEXT DEFAULT '',
+  created_at    TIMESTAMPTZ DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS keywords_sku_idx ON keywords(sku);
+-- For existing tables (re-run safe):
+ALTER TABLE keywords ADD COLUMN IF NOT EXISTS keyword_type TEXT DEFAULT 'positive';
 
 -- ============================================================
 -- 9. Targeting — Ad ASINs (SKU × ASIN)
@@ -142,6 +145,7 @@ CREATE TABLE IF NOT EXISTS targeting_asins (
   sku         TEXT REFERENCES skus(sku) ON DELETE CASCADE,
   asin        TEXT NOT NULL,
   title       TEXT DEFAULT '',
+  asin_type   TEXT DEFAULT 'target',  -- 'target' | 'negative'
   bid         NUMERIC DEFAULT 0,
   status      TEXT DEFAULT 'active',
   note        TEXT DEFAULT '',
@@ -149,6 +153,8 @@ CREATE TABLE IF NOT EXISTS targeting_asins (
   updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS targeting_asins_sku_idx ON targeting_asins(sku);
+-- For existing tables (re-run safe):
+ALTER TABLE targeting_asins ADD COLUMN IF NOT EXISTS asin_type TEXT DEFAULT 'target';
 
 -- ============================================================
 -- 10. Weekly wrap-ups
