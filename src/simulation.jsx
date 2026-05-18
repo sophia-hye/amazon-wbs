@@ -2,29 +2,36 @@ import { useState, useMemo } from 'react'
 
 const MONTHS = ['5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월']
 
+// Per-month editable inputs only (5 fields)
 const INITIAL_INPUTS = [
-  { aov: 14.99, fbqty: 2000, targetUnits: 150,  paidUnits: 128,  acos: 120, logistics: 2.00, tariff: 0.50, cogs: 4.00, opex: 1000 },
-  { aov: 14.99, fbqty: 0,    targetUnits: 500,  paidUnits: 400,  acos: 110, logistics: 2.00, tariff: 0.50, cogs: 4.00, opex: 1000 },
-  { aov: 14.99, fbqty: 2000, targetUnits: 650,  paidUnits: 488,  acos: 95,  logistics: 2.00, tariff: 0.50, cogs: 4.00, opex: 1000 },
-  { aov: 16.99, fbqty: 0,    targetUnits: 700,  paidUnits: 490,  acos: 80,  logistics: 2.00, tariff: 0.50, cogs: 4.00, opex: 1000 },
-  { aov: 17.99, fbqty: 1500, targetUnits: 750,  paidUnits: 488,  acos: 75,  logistics: 2.00, tariff: 0.50, cogs: 4.00, opex: 1000 },
-  { aov: 15.99, fbqty: 0,    targetUnits: 950,  paidUnits: 570,  acos: 70,  logistics: 2.00, tariff: 0.50, cogs: 4.00, opex: 1000 },
-  { aov: 13.99, fbqty: 1500, targetUnits: 1100, paidUnits: 605,  acos: 65,  logistics: 2.00, tariff: 0.50, cogs: 4.00, opex: 1000 },
-  { aov: 14.99, fbqty: 0,    targetUnits: 1250, paidUnits: 625,  acos: 60,  logistics: 2.00, tariff: 0.50, cogs: 4.00, opex: 1000 },
+  { aov: 14.99, targetUnits: 150,  paidUnits: 128,  acos: 120, opex: 2200 },
+  { aov: 14.99, targetUnits: 500,  paidUnits: 400,  acos: 110, opex: 700  },
+  { aov: 14.99, targetUnits: 650,  paidUnits: 488,  acos: 95,  opex: 700  },
+  { aov: 16.99, targetUnits: 700,  paidUnits: 490,  acos: 80,  opex: 700  },
+  { aov: 17.99, targetUnits: 750,  paidUnits: 488,  acos: 75,  opex: 700  },
+  { aov: 15.99, targetUnits: 950,  paidUnits: 570,  acos: 70,  opex: 700  },
+  { aov: 13.99, targetUnits: 1100, paidUnits: 605,  acos: 65,  opex: 700  },
+  { aov: 14.99, targetUnits: 1250, paidUnits: 625,  acos: 60,  opex: 700  },
 ]
 
-const DEFAULT_FEES = {
-  fbaFee: 3.22,
-  storageFee: 0.10,
-  commissionRate: 15,
-  refundRate: 2,
-  professionalPlan: 40,
-  inboundPlacementFee: 0.30,
+// Unit rates & fee parameters (global settings)
+const DEFAULT_RATES = {
+  inboundRatio:         115,   // % of target sales → FBA 입고 수량
+  commissionRate:        20,   // % Amazon Jewelry Referral Fee
+  refundRate:             4,   // % of revenue
+  fbaFee:              3.81,   // $/unit sold — FBA Service Commission
+  fbaStorageFee:       0.004,  // $/unit/month (end inventory)
+  professionalPlan:      40,   // $/month
+  inboundPlacementFee: 0.40,   // $/unit inbound
+  logistics:           0.48,   // $/unit inbound (CN-US 직수입)
+  tariff:              0.27,   // $/unit inbound
+  cogs:                2.10,   // $/unit sold
+  packaging:           0.35,   // $/unit sold (패키징/브랜딩/Prep)
 }
 
-function calcAll(inputs, fees) {
-  const commRate = fees.commissionRate / 100
-  const refRate  = fees.refundRate / 100
+function calcAll(inputs, rates) {
+  const commRate = rates.commissionRate / 100
+  const refRate  = rates.refundRate / 100
   const results  = []
   let prevEndStock = 0
   let cumProfit    = 0
@@ -32,59 +39,76 @@ function calcAll(inputs, fees) {
   for (let i = 0; i < inputs.length; i++) {
     const m = inputs[i]
 
-    // ── Revenue
-    const targetRevenue  = m.aov * m.targetUnits
-    const paidRevenue    = m.aov * m.paidUnits
-    const paidRatio      = m.targetUnits > 0 ? m.paidUnits / m.targetUnits : 0
-    const adSpend        = paidRevenue * (m.acos / 100)
+    // ── 예상 목표
+    const fbqty         = Math.round(m.targetUnits * rates.inboundRatio / 100)
+    const targetRevenue = m.aov * m.targetUnits
+
+    // ── 유료 매출
+    const paidRatio   = m.targetUnits > 0 ? m.paidUnits / m.targetUnits : 0
+    const paidRevenue = m.aov * m.paidUnits
+    const adSpend     = paidRevenue * (m.acos / 100)
+
+    // ── 오가닉 매출
     const organicUnits   = Math.max(0, m.targetUnits - m.paidUnits)
     const organicRatio   = m.targetUnits > 0 ? organicUnits / m.targetUnits : 0
     const organicRevenue = m.aov * organicUnits
 
-    // ── Costs
-    const refund         = targetRevenue * refRate
-    const commission     = targetRevenue * commRate
-    const fbaService     = m.targetUnits * fees.fbaFee
-    const endStock       = prevEndStock + m.fbqty - m.targetUnits
-    const endInventory   = Math.max(0, endStock)
-    const storage        = endInventory * fees.storageFee
-    const profPlan       = fees.professionalPlan
-    const inboundFee     = m.fbqty * fees.inboundPlacementFee
-    const logisticsCost  = m.targetUnits * m.logistics
-    const tariffCost     = m.targetUnits * m.tariff
-    const cogsCost       = m.targetUnits * m.cogs
+    // ── 수수료
+    const refund      = targetRevenue * refRate
+    const commission  = targetRevenue * commRate
+    const fbaService  = m.targetUnits * rates.fbaFee
+    const endStock    = prevEndStock + fbqty - m.targetUnits
+    const endInventory = Math.max(0, endStock)
+    const storage     = endInventory * rates.fbaStorageFee
+    const profPlan    = rates.professionalPlan
 
+    // ── 유통/물류 (inbound 수량 기준)
+    const inboundFee    = fbqty * rates.inboundPlacementFee
+    const logisticsCost = fbqty * rates.logistics
+
+    // ── 통관비 (inbound 수량 기준)
+    const tariffCost = fbqty * rates.tariff
+
+    // ── 제조원가 (판매량 기준)
+    const cogsCost = m.targetUnits * rates.cogs
+
+    // ── 판관비
+    const packagingCost = m.targetUnits * rates.packaging
+    const opex          = m.opex
+
+    // ── 비용 합계
     const totalCost = adSpend + refund + commission + fbaService + storage
                     + profPlan + inboundFee + logisticsCost + tariffCost
-                    + cogsCost + m.opex
+                    + cogsCost + packagingCost + opex
 
-    // ── P&L
+    // ── 손익
     const operatingProfit = targetRevenue - totalCost
     const operatingMargin = targetRevenue > 0 ? operatingProfit / targetRevenue : 0
     cumProfit += operatingProfit
 
-    // ── Inventory
-    const inventoryCash = endInventory * m.cogs
+    // ── 재고
+    const inventoryCash = endInventory * rates.cogs
 
-    // ── Unit economics
-    // Contribution margin per unit (before ad spend)
-    const contributionMargin = m.aov * (1 - refRate - commRate)
-                             - fees.fbaFee - m.logistics - m.tariff - m.cogs
-    const adSpendPerUnit     = m.targetUnits > 0 ? adSpend / m.targetUnits : 0
-    const contributionAfterAd = contributionMargin - adSpendPerUnit
-    // Break-even ACoS = (contribution margin before ad) / paid-unit AOV
-    const breakEvenAcos = m.aov > 0 ? Math.max(0, contributionMargin) / m.aov : 0
+    // ── 단위경제 (광고·고정비 제외)
+    const contributionMargin  = m.aov * (1 - refRate - commRate)
+                               - rates.fbaFee - rates.cogs - rates.packaging
+    const adSpendPerUnit       = m.targetUnits > 0 ? adSpend / m.targetUnits : 0
+    const contributionAfterAd  = contributionMargin - adSpendPerUnit
+    const breakEvenAcos        = m.aov > 0 ? Math.max(0, contributionMargin) / m.aov : 0
 
     results.push({
-      targetRevenue, paidRevenue, paidRatio, adSpend,
+      fbqty, targetRevenue,
+      paidRatio, paidRevenue, adSpend,
       organicUnits, organicRatio, organicRevenue,
-      refund, commission, fbaService, storage, profPlan, inboundFee,
-      logisticsCost, tariffCost, cogsCost,
+      refund, commission, fbaService, storage, profPlan,
+      inboundFee, logisticsCost,
+      tariffCost,
+      cogsCost,
+      packagingCost, opex,
       totalCost, operatingProfit, operatingMargin, cumProfit,
       endInventory, inventoryCash,
       contributionMargin, adSpendPerUnit, contributionAfterAd, breakEvenAcos,
     })
-
     prevEndStock = endInventory
   }
   return results
@@ -97,13 +121,13 @@ const f$ = (v) => {
   const s   = abs >= 10000 ? `$${Math.round(abs).toLocaleString()}`
             : abs >= 100   ? `$${abs.toFixed(0)}`
             :                `$${abs.toFixed(2)}`
-  return v < 0 ? `-${s}` : s
+  return v < 0 ? `(${s})` : s
 }
 const fN  = (v) => isFinite(v) ? Math.round(v).toLocaleString() : '–'
-const fP  = (v) => isFinite(v) ? `${(v * 100).toFixed(1)}%` : '–'
-const fPr = (v) => isFinite(v) ? `${(v * 100).toFixed(1)}%` : '–'
+const fP  = (v) => isFinite(v) ? `${(v * 100).toFixed(2)}%` : '–'
+const fPp = (v) => isFinite(v) ? `${(v * 100).toFixed(1)}%` : '–'
 
-// ── Row sub-components
+// ── Sub-components
 function SectionRow({ label }) {
   return (
     <tr className="sim-section-row">
@@ -115,7 +139,7 @@ function SectionRow({ label }) {
 function ValCell({ v, fmt = f$, extra = '' }) {
   const neg = typeof v === 'number' && v < 0
   return (
-    <td className={`sim-val ${extra}${neg ? ' sim-neg' : ''}`}>
+    <td className={`sim-val${extra ? ' ' + extra : ''}${neg ? ' sim-neg' : ''}`}>
       {fmt(v)}
     </td>
   )
@@ -140,12 +164,30 @@ function InputCell({ idx, field, inputs, onChange, prefix, suffix, step = 'any',
   )
 }
 
+function FeeInput({ label, value, onChange, unit, step = 'any' }) {
+  return (
+    <div className="sim-fee-item">
+      <span className="sim-fee-label">{label}</span>
+      <div className="sim-fee-ctrl">
+        <input
+          type="number"
+          step={step}
+          className="sim-fee-inp"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <span className="sim-fee-unit">{unit}</span>
+      </div>
+    </div>
+  )
+}
+
 export function SimulationPage() {
-  const [inputs, setInputs]       = useState(INITIAL_INPUTS)
-  const [fees, setFees]           = useState(DEFAULT_FEES)
+  const [inputs, setInputs]         = useState(INITIAL_INPUTS)
+  const [rates, setRates]           = useState(DEFAULT_RATES)
   const [showSettings, setShowSettings] = useState(false)
 
-  const calc = useMemo(() => calcAll(inputs, fees), [inputs, fees])
+  const calc = useMemo(() => calcAll(inputs, rates), [inputs, rates])
 
   const handleCell = (idx, field, raw) => {
     const v = parseFloat(raw)
@@ -154,16 +196,14 @@ export function SimulationPage() {
     setInputs((prev) => prev.map((m, i) => i === idx ? { ...m, [field]: v } : m))
   }
 
-  const handleFee = (field, raw) => {
+  const handleRate = (field, raw) => {
     const v = parseFloat(raw)
     if (isNaN(v)) return
-    setFees((prev) => ({ ...prev, [field]: v }))
+    setRates((prev) => ({ ...prev, [field]: v }))
   }
 
-  // shared props for InputCell
-  const ic = (idx, field, opts = {}) => ({
-    idx, field, inputs, onChange: handleCell, ...opts,
-  })
+  // shorthand for InputCell props
+  const ic = (idx, field, opts = {}) => ({ idx, field, inputs, onChange: handleCell, ...opts })
 
   return (
     <div className="page simulation-page">
@@ -171,26 +211,44 @@ export function SimulationPage() {
       <div className="page-header">
         <div>
           <div className="page-title">매출 시뮬레이션</div>
-          <div className="page-subtitle">릴라헤이븐 Amazon US 2026년 5~12월 · 입력값 변경 시 자동 계산</div>
+          <div className="page-subtitle">
+            릴라헤이븐 Amazon US 2026년 5~12월 · 파란색 셀 입력 시 자동 계산
+          </div>
         </div>
         <button className="btn" onClick={() => setShowSettings((s) => !s)}>
-          {showSettings ? '설정 닫기' : '수수료 · 요율 설정'}
+          {showSettings ? '설정 닫기' : '단가 · 수수료 설정'}
         </button>
       </div>
 
-      {/* ── Fee settings panel */}
+      {/* ── Rate settings panel */}
       {showSettings && (
         <div className="sim-settings">
-          <FeeInput label="FBA 수수료 / unit" value={fees.fbaFee} onChange={(v) => handleFee('fbaFee', v)} unit="$" />
-          <FeeInput label="FBA 보관료 / unit / 월" value={fees.storageFee} onChange={(v) => handleFee('storageFee', v)} unit="$" />
-          <FeeInput label="Amazon 판매 수수료율" value={fees.commissionRate} onChange={(v) => handleFee('commissionRate', v)} unit="%" />
-          <FeeInput label="반품 / 환불 충당율" value={fees.refundRate} onChange={(v) => handleFee('refundRate', v)} unit="%" />
-          <FeeInput label="Professional Selling Plan" value={fees.professionalPlan} onChange={(v) => handleFee('professionalPlan', v)} unit="$/월" />
-          <FeeInput label="인바운드 배치 수수료 / unit" value={fees.inboundPlacementFee} onChange={(v) => handleFee('inboundPlacementFee', v)} unit="$" />
+          <FeeInput label="FBA 입고 비율" value={rates.inboundRatio} step="1"
+            onChange={(v) => handleRate('inboundRatio', v)} unit="% of 목표판매량" />
+          <FeeInput label="Amazon 판매 수수료율" value={rates.commissionRate} step="0.1"
+            onChange={(v) => handleRate('commissionRate', v)} unit="%" />
+          <FeeInput label="반품 / 환불 충당율" value={rates.refundRate} step="0.1"
+            onChange={(v) => handleRate('refundRate', v)} unit="%" />
+          <FeeInput label="FBA Service Commission / unit" value={rates.fbaFee} step="0.01"
+            onChange={(v) => handleRate('fbaFee', v)} unit="$" />
+          <FeeInput label="FBA 보관료 / unit / 월" value={rates.fbaStorageFee} step="0.001"
+            onChange={(v) => handleRate('fbaStorageFee', v)} unit="$" />
+          <FeeInput label="Professional Selling Plan" value={rates.professionalPlan} step="1"
+            onChange={(v) => handleRate('professionalPlan', v)} unit="$/월" />
+          <FeeInput label="FBA 인바운드 배치 수수료 / unit" value={rates.inboundPlacementFee} step="0.01"
+            onChange={(v) => handleRate('inboundPlacementFee', v)} unit="$ (입고 기준)" />
+          <FeeInput label="CN-US 물류비 / unit" value={rates.logistics} step="0.01"
+            onChange={(v) => handleRate('logistics', v)} unit="$ (입고 기준)" />
+          <FeeInput label="수입관세 / unit" value={rates.tariff} step="0.01"
+            onChange={(v) => handleRate('tariff', v)} unit="$ (입고 기준)" />
+          <FeeInput label="제조원가 / unit" value={rates.cogs} step="0.01"
+            onChange={(v) => handleRate('cogs', v)} unit="$" />
+          <FeeInput label="패키징/브랜딩/Prep / unit" value={rates.packaging} step="0.01"
+            onChange={(v) => handleRate('packaging', v)} unit="$" />
         </div>
       )}
 
-      {/* ── Spreadsheet table */}
+      {/* ── Spreadsheet */}
       <div className="sim-scroll">
         <table className="sim-tbl">
           <thead>
@@ -201,147 +259,155 @@ export function SimulationPage() {
           </thead>
           <tbody>
 
-            {/* ════ 입력값 ════ */}
-            <SectionRow label="입력값 (직접 입력)" />
-
+            {/* ════ 예상 목표 ════ */}
+            <SectionRow label="예상 목표" />
             <tr className="sim-input-row">
-              <td className="sim-lbl">소비자 가격 (AOV)</td>
+              <td className="sim-lbl">아마존 소비자 가격 (AOV, $)</td>
               {inputs.map((_, i) => <InputCell key={i} {...ic(i, 'aov', { prefix: '$', step: '0.01' })} />)}
             </tr>
-            <tr className="sim-input-row">
-              <td className="sim-lbl">FBA 입고 수량</td>
-              {inputs.map((_, i) => <InputCell key={i} {...ic(i, 'fbqty', { suffix: '개', step: '1', min: '0' })} />)}
+            <tr>
+              <td className="sim-lbl sim-calc-lbl">FBA 입고 수량 (목표 × {rates.inboundRatio}%)</td>
+              {calc.map((c, i) => <ValCell key={i} v={c.fbqty} fmt={fN} />)}
             </tr>
             <tr className="sim-input-row">
-              <td className="sim-lbl">목표 월간 판매량</td>
+              <td className="sim-lbl">목표 월간판매량 (개)</td>
               {inputs.map((_, i) => <InputCell key={i} {...ic(i, 'targetUnits', { suffix: '개', step: '1', min: '0' })} />)}
             </tr>
+            <tr>
+              <td className="sim-lbl sim-bold">목표 월간매출 ($)</td>
+              {calc.map((c, i) => <ValCell key={i} v={c.targetRevenue} extra="sim-bold" />)}
+            </tr>
+
+            {/* ════ 유료 매출 ════ */}
+            <SectionRow label="유료 매출" />
             <tr className="sim-input-row">
-              <td className="sim-lbl">유료매출 판매량</td>
+              <td className="sim-lbl">판매량 (개)</td>
               {inputs.map((_, i) => <InputCell key={i} {...ic(i, 'paidUnits', { suffix: '개', step: '1', min: '0' })} />)}
+            </tr>
+            <tr>
+              <td className="sim-lbl sim-calc-lbl">유료광고 매출비율 (전체 매출의 %)</td>
+              {calc.map((c, i) => <ValCell key={i} v={c.paidRatio} fmt={fP} />)}
+            </tr>
+            <tr>
+              <td className="sim-lbl sim-calc-lbl">유료광고 매출액 ($)</td>
+              {calc.map((c, i) => <ValCell key={i} v={c.paidRevenue} />)}
             </tr>
             <tr className="sim-input-row">
               <td className="sim-lbl">ACoS</td>
               {inputs.map((_, i) => <InputCell key={i} {...ic(i, 'acos', { suffix: '%', step: '0.1' })} />)}
             </tr>
-            <tr className="sim-input-row">
-              <td className="sim-lbl">물류비 / unit</td>
-              {inputs.map((_, i) => <InputCell key={i} {...ic(i, 'logistics', { prefix: '$', step: '0.01' })} />)}
-            </tr>
-            <tr className="sim-input-row">
-              <td className="sim-lbl">수입관세 / unit</td>
-              {inputs.map((_, i) => <InputCell key={i} {...ic(i, 'tariff', { prefix: '$', step: '0.01' })} />)}
-            </tr>
-            <tr className="sim-input-row">
-              <td className="sim-lbl">제조원가 / unit</td>
-              {inputs.map((_, i) => <InputCell key={i} {...ic(i, 'cogs', { prefix: '$', step: '0.01' })} />)}
-            </tr>
-            <tr className="sim-input-row">
-              <td className="sim-lbl">판관비 (월 고정)</td>
-              {inputs.map((_, i) => <InputCell key={i} {...ic(i, 'opex', { prefix: '$', step: '10' })} />)}
+            <tr>
+              <td className="sim-lbl sim-bold sim-cost-lbl">내부 유료광고 지출비용 ($)</td>
+              {calc.map((c, i) => <ValCell key={i} v={c.adSpend} extra="sim-bold sim-cost" />)}
             </tr>
 
-            {/* ════ 매출 분석 ════ */}
-            <SectionRow label="매출 분석" />
-
+            {/* ════ 오가닉 매출 ════ */}
+            <SectionRow label="오가닉 매출" />
             <tr>
-              <td className="sim-lbl sim-bold">목표 월간매출</td>
-              {calc.map((c, i) => <ValCell key={i} v={c.targetRevenue} extra="sim-bold" />)}
-            </tr>
-            <tr>
-              <td className="sim-lbl">유료광고 매출비율</td>
-              {calc.map((c, i) => <ValCell key={i} v={c.paidRatio} fmt={fP} />)}
-            </tr>
-            <tr>
-              <td className="sim-lbl">유료광고 매출액</td>
-              {calc.map((c, i) => <ValCell key={i} v={c.paidRevenue} />)}
-            </tr>
-            <tr>
-              <td className="sim-lbl sim-cost-lbl">광고비 지출 (Ad Spend)</td>
-              {calc.map((c, i) => <ValCell key={i} v={c.adSpend} extra="sim-cost" />)}
-            </tr>
-            <tr>
-              <td className="sim-lbl">오가닉 판매량</td>
+              <td className="sim-lbl sim-calc-lbl">판매량 (개)</td>
               {calc.map((c, i) => <ValCell key={i} v={c.organicUnits} fmt={fN} />)}
             </tr>
             <tr>
-              <td className="sim-lbl">오가닉 매출비율</td>
+              <td className="sim-lbl sim-calc-lbl">오가닉 매출비율 (전체 매출의 %)</td>
               {calc.map((c, i) => <ValCell key={i} v={c.organicRatio} fmt={fP} />)}
             </tr>
             <tr>
-              <td className="sim-lbl">오가닉 매출액</td>
+              <td className="sim-lbl sim-calc-lbl">오가닉 매출액 ($)</td>
               {calc.map((c, i) => <ValCell key={i} v={c.organicRevenue} />)}
             </tr>
 
-            {/* ════ 비용 분석 ════ */}
-            <SectionRow label="비용 분석" />
-
+            {/* ════ 수수료 ════ */}
+            <SectionRow label="수수료" />
             <tr>
-              <td className="sim-lbl sim-cost-lbl">반품 / 환불충당금</td>
+              <td className="sim-lbl sim-cost-lbl">반품/환불충당금 ($)</td>
               {calc.map((c, i) => <ValCell key={i} v={c.refund} extra="sim-cost" />)}
             </tr>
             <tr>
-              <td className="sim-lbl sim-cost-lbl">Sales Commission ({fees.commissionRate}%)</td>
+              <td className="sim-lbl sim-cost-lbl">Sales Commission — Jewelry Referral Fee {rates.commissionRate}%</td>
               {calc.map((c, i) => <ValCell key={i} v={c.commission} extra="sim-cost" />)}
             </tr>
             <tr>
-              <td className="sim-lbl sim-cost-lbl">FBA 서비스 수수료</td>
+              <td className="sim-lbl sim-cost-lbl">FBA Service Commission / Fulfillment ($)</td>
               {calc.map((c, i) => <ValCell key={i} v={c.fbaService} extra="sim-cost" />)}
             </tr>
             <tr>
-              <td className="sim-lbl sim-cost-lbl">FBA 보관료</td>
+              <td className="sim-lbl sim-cost-lbl">FBA Storage Fee ($)</td>
               {calc.map((c, i) => <ValCell key={i} v={c.storage} extra="sim-cost" />)}
             </tr>
             <tr>
-              <td className="sim-lbl sim-cost-lbl">Professional Selling Plan</td>
+              <td className="sim-lbl sim-cost-lbl">Professional Selling Plan ($)</td>
               {calc.map((c, i) => <ValCell key={i} v={c.profPlan} extra="sim-cost" />)}
             </tr>
+
+            {/* ════ 유통/물류 ════ */}
+            <SectionRow label="유통/물류" />
             <tr>
-              <td className="sim-lbl sim-cost-lbl">FBA 인바운드 배치 수수료</td>
+              <td className="sim-lbl sim-cost-lbl">FBA inbound placement fee ($)</td>
               {calc.map((c, i) => <ValCell key={i} v={c.inboundFee} extra="sim-cost" />)}
             </tr>
             <tr>
-              <td className="sim-lbl sim-cost-lbl">물류비 합계</td>
+              <td className="sim-lbl sim-cost-lbl">CN-US 직수입/아마존 FBA 입고 물류비 ($)</td>
               {calc.map((c, i) => <ValCell key={i} v={c.logisticsCost} extra="sim-cost" />)}
             </tr>
+
+            {/* ════ 통관비 ════ */}
+            <SectionRow label="통관비" />
             <tr>
-              <td className="sim-lbl sim-cost-lbl">수입관세 합계</td>
+              <td className="sim-lbl sim-cost-lbl">상호 수입관세 / Duties ($)</td>
               {calc.map((c, i) => <ValCell key={i} v={c.tariffCost} extra="sim-cost" />)}
             </tr>
+
+            {/* ════ 제조원가 ════ */}
+            <SectionRow label="제조원가" />
             <tr>
-              <td className="sim-lbl sim-cost-lbl">제조원가 합계</td>
+              <td className="sim-lbl sim-cost-lbl">Unit 당 제품 제조원가 합계 ($)</td>
               {calc.map((c, i) => <ValCell key={i} v={c.cogsCost} extra="sim-cost" />)}
             </tr>
+
+            {/* ════ 판관비 ════ */}
+            <SectionRow label="판관비" />
             <tr>
-              <td className="sim-lbl sim-cost-lbl">판관비</td>
-              {inputs.map((m, i) => <ValCell key={i} v={m.opex} extra="sim-cost" />)}
+              <td className="sim-lbl sim-cost-lbl">패키징/브랜딩/Prep ($)</td>
+              {calc.map((c, i) => <ValCell key={i} v={c.packagingCost} extra="sim-cost" />)}
+            </tr>
+            <tr className="sim-input-row">
+              <td className="sim-lbl">운영고정비/툴/CS/콘텐츠 ($)</td>
+              {inputs.map((_, i) => <InputCell key={i} {...ic(i, 'opex', { prefix: '$', step: '100' })} />)}
             </tr>
 
-            {/* ════ 손익 요약 ════ */}
-            <SectionRow label="손익 요약" />
-
+            {/* ════ 비용 합계 ════ */}
+            <SectionRow label="비용 합계" />
             <tr>
-              <td className="sim-lbl sim-bold sim-cost-lbl">총 비용</td>
+              <td className="sim-lbl sim-bold sim-cost-lbl">총비용 ($)</td>
               {calc.map((c, i) => <ValCell key={i} v={c.totalCost} extra="sim-bold sim-cost" />)}
             </tr>
+
+            {/* ════ 합산 영업이익 ════ */}
+            <SectionRow label="합산 영업이익" />
             <tr>
-              <td className="sim-lbl sim-bold">영업이익</td>
+              <td className="sim-lbl sim-bold">영업이익 ($)</td>
               {calc.map((c, i) => (
                 <td key={i} className={`sim-val sim-bold ${c.operatingProfit >= 0 ? 'sim-pos' : 'sim-neg'}`}>
                   {f$(c.operatingProfit)}
                 </td>
               ))}
             </tr>
+
+            {/* ════ 합산 영업이익률 ════ */}
+            <SectionRow label="합산 영업이익률" />
             <tr>
               <td className="sim-lbl">영업이익률</td>
               {calc.map((c, i) => (
                 <td key={i} className={`sim-val ${c.operatingMargin >= 0 ? 'sim-pos' : 'sim-neg'}`}>
-                  {fP(c.operatingMargin)}
+                  {fPp(c.operatingMargin)}
                 </td>
               ))}
             </tr>
+
+            {/* ════ 누적 영업이익 ════ */}
+            <SectionRow label="누적 영업이익" />
             <tr>
-              <td className="sim-lbl sim-bold">누적 영업이익</td>
+              <td className="sim-lbl sim-bold">누적 영업이익 ($)</td>
               {calc.map((c, i) => (
                 <td key={i} className={`sim-val sim-bold ${c.cumProfit >= 0 ? 'sim-pos' : 'sim-neg'}`}>
                   {f$(c.cumProfit)}
@@ -351,21 +417,19 @@ export function SimulationPage() {
 
             {/* ════ 재고 ════ */}
             <SectionRow label="재고" />
-
             <tr>
-              <td className="sim-lbl">월말 재고수량</td>
+              <td className="sim-lbl">월말 재고수량 (개)</td>
               {calc.map((c, i) => <ValCell key={i} v={c.endInventory} fmt={fN} />)}
             </tr>
             <tr>
-              <td className="sim-lbl">재고현금</td>
+              <td className="sim-lbl">입고 기준 재고현금 ($)</td>
               {calc.map((c, i) => <ValCell key={i} v={c.inventoryCash} />)}
             </tr>
 
-            {/* ════ 단위 경제 ════ */}
-            <SectionRow label="단위 경제 (Unit Economics)" />
-
+            {/* ════ 단위경제 ════ */}
+            <SectionRow label="단위경제" />
             <tr>
-              <td className="sim-lbl">공헌이익 / unit</td>
+              <td className="sim-lbl">공헌이익/개 — 광고·고정비 제외 ($)</td>
               {calc.map((c, i) => (
                 <td key={i} className={`sim-val ${c.contributionMargin >= 0 ? 'sim-pos' : 'sim-neg'}`}>
                   {f$(c.contributionMargin)}
@@ -373,7 +437,7 @@ export function SimulationPage() {
               ))}
             </tr>
             <tr>
-              <td className="sim-lbl">광고 후 공헌이익 / unit</td>
+              <td className="sim-lbl">광고 후 공헌이익/개 ($)</td>
               {calc.map((c, i) => (
                 <td key={i} className={`sim-val ${c.contributionAfterAd >= 0 ? 'sim-pos' : 'sim-neg'}`}>
                   {f$(c.contributionAfterAd)}
@@ -381,30 +445,12 @@ export function SimulationPage() {
               ))}
             </tr>
             <tr>
-              <td className="sim-lbl">Break-even ACoS</td>
-              {calc.map((c, i) => <ValCell key={i} v={c.breakEvenAcos} fmt={fPr} />)}
+              <td className="sim-lbl">Break-even ACoS (광고매출 기준)</td>
+              {calc.map((c, i) => <ValCell key={i} v={c.breakEvenAcos} fmt={fPp} />)}
             </tr>
 
           </tbody>
         </table>
-      </div>
-    </div>
-  )
-}
-
-function FeeInput({ label, value, onChange, unit }) {
-  return (
-    <div className="sim-fee-item">
-      <span className="sim-fee-label">{label}</span>
-      <div className="sim-fee-ctrl">
-        <input
-          type="number"
-          step="any"
-          className="sim-fee-inp"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-        />
-        <span className="sim-fee-unit">{unit}</span>
       </div>
     </div>
   )

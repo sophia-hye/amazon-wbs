@@ -1527,6 +1527,7 @@ button { font: inherit; color: inherit; }
 }
 .sim-bold { font-weight: 600; color: var(--fg); }
 .sim-cost-lbl { color: var(--fg-tertiary); }
+.sim-calc-lbl { color: var(--fg-tertiary); font-style: italic; }
 
 /* Input rows */
 .sim-input-row .sim-lbl { font-weight: 500; color: var(--fg); }
