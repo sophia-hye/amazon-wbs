@@ -1,9 +1,9 @@
 import {
-  IDashboard, IWBS, ICalendar, ILog, IWeek, ISKU, IPPC, ISales,
+  IDashboard, IWBS, ICalendar, ILog, IWeek, ISKU, IPPC, ISales, ITarget,
   ISidebar, ISearch, ISun, IMoon, IBell,
 } from './icons.jsx'
 import { DashboardPage, WBSPage, CalendarPage, DailyLogPage, DailySalesPage } from './pages.jsx'
-import { SKUPage, PPCPage } from './sku-ppc.jsx'
+import { SKUPage, PPCPage, TargetingPage } from './sku-ppc.jsx'
 import {
   TweaksPanel, TweakSection, TweakToggle, TweakColor, TweakRadio, TweakSlider,
   useTweaks,
@@ -33,9 +33,10 @@ const NAV_DEFS = [
   { id: 'weekly',    label: 'Weekly Log', icon: IWeek },
 ]
 const NAV2_DEFS = [
-  { id: 'sku',         label: 'SKUs',         icon: ISKU  },
-  { id: 'ppc',         label: 'PPC Ads',       icon: IPPC  },
-  { id: 'daily-sales', label: 'Daily Sales',   icon: ISales },
+  { id: 'sku',        label: 'SKUs',        icon: ISKU    },
+  { id: 'ppc',        label: 'PPC Ads',     icon: IPPC    },
+  { id: 'daily-sales',label: 'Daily Sales', icon: ISales  },
+  { id: 'targeting',  label: 'Targeting',   icon: ITarget },
 ]
 
 // ---- Field mappers (module-level → stable references) ----
@@ -148,6 +149,54 @@ const CAMPAIGNS_TABLE_OPTIONS = {
 }
 const PROFILE_DEFAULTS = { name: '', role: '', market: 'Amazon US' }
 
+const keywordToRow = (k) => ({
+  id: k.id,
+  sku: k.sku,
+  keyword: k.keyword,
+  match_type: k.match_type,
+  bid: Number(k.bid) || 0,
+  status: k.status || 'active',
+  note: k.note || '',
+})
+const keywordFromRow = (r) => ({
+  id: r.id,
+  sku: r.sku,
+  keyword: r.keyword,
+  match_type: r.match_type,
+  bid: Number(r.bid) || 0,
+  status: r.status || 'active',
+  note: r.note || '',
+})
+const KEYWORDS_OPTIONS = {
+  orderBy: { column: 'keyword', ascending: true },
+  toRow: keywordToRow,
+  fromRow: keywordFromRow,
+}
+
+const targetingAsinToRow = (a) => ({
+  id: a.id,
+  sku: a.sku,
+  asin: a.asin,
+  title: a.title || '',
+  bid: Number(a.bid) || 0,
+  status: a.status || 'active',
+  note: a.note || '',
+})
+const targetingAsinFromRow = (r) => ({
+  id: r.id,
+  sku: r.sku,
+  asin: r.asin,
+  title: r.title || '',
+  bid: Number(r.bid) || 0,
+  status: r.status || 'active',
+  note: r.note || '',
+})
+const TARGETING_ASINS_OPTIONS = {
+  orderBy: { column: 'asin', ascending: true },
+  toRow: targetingAsinToRow,
+  fromRow: targetingAsinFromRow,
+}
+
 function countAllTasks(wbs) {
   let n = 0
   const walk = (nodes) => nodes.forEach((node) => {
@@ -176,6 +225,8 @@ export default function App() {
   const [skus, setSkus] = useSupabaseTable('skus', SKU_TABLE_OPTIONS)
   const [campaigns, setCampaigns] = useSupabaseTable('campaigns', CAMPAIGNS_TABLE_OPTIONS)
   const [dailySales, setDailySales] = useSupabaseTable('daily_metrics', DAILY_SALES_OPTIONS)
+  const [keywords, setKeywords] = useSupabaseTable('keywords', KEYWORDS_OPTIONS)
+  const [targetingAsins, setTargetingAsins] = useSupabaseTable('targeting_asins', TARGETING_ASINS_OPTIONS)
   const [wraps, setWraps] = useSupabaseWraps()
   const [profile, setProfile] = useSupabaseSingleRow('profile', { id: 1 }, PROFILE_DEFAULTS)
 
@@ -229,6 +280,8 @@ export default function App() {
     sku:          <SKUPage skus={skus} setSkus={setSkus} />,
     ppc:          <PPCPage campaigns={campaigns} setCampaigns={setCampaigns} skus={skus} />,
     'daily-sales': <DailySalesPage skus={skus} dailySales={dailySales} setDailySales={setDailySales} />,
+    targeting:     <TargetingPage skus={skus} keywords={keywords} setKeywords={setKeywords}
+                                  targetingAsins={targetingAsins} setTargetingAsins={setTargetingAsins} />,
   }[tab]
 
   const crumb = [...NAV, ...NAV2].find((n) => n.id === tab)?.label || ''

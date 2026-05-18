@@ -119,7 +119,39 @@ CREATE INDEX IF NOT EXISTS daily_metrics_date_idx ON daily_metrics(date DESC);
 CREATE INDEX IF NOT EXISTS daily_metrics_sku_idx  ON daily_metrics(sku);
 
 -- ============================================================
--- 8. Weekly wrap-ups
+-- 8. Targeting — Keywords (SKU × keyword)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS keywords (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  sku         TEXT REFERENCES skus(sku) ON DELETE CASCADE,
+  keyword     TEXT NOT NULL,
+  match_type  TEXT DEFAULT 'Exact',
+  bid         NUMERIC DEFAULT 0,
+  status      TEXT DEFAULT 'active',
+  note        TEXT DEFAULT '',
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS keywords_sku_idx ON keywords(sku);
+
+-- ============================================================
+-- 9. Targeting — Ad ASINs (SKU × ASIN)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS targeting_asins (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  sku         TEXT REFERENCES skus(sku) ON DELETE CASCADE,
+  asin        TEXT NOT NULL,
+  title       TEXT DEFAULT '',
+  bid         NUMERIC DEFAULT 0,
+  status      TEXT DEFAULT 'active',
+  note        TEXT DEFAULT '',
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS targeting_asins_sku_idx ON targeting_asins(sku);
+
+-- ============================================================
+-- 10. Weekly wrap-ups
 -- ============================================================
 CREATE TABLE IF NOT EXISTS weekly_wraps (
   week_key      TEXT PRIMARY KEY,                 -- e.g. '2026-W19'
@@ -159,7 +191,8 @@ DECLARE
 BEGIN
   FOR t IN SELECT unnest(ARRAY[
     'wbs_tasks','task_done','logs','events','skus',
-    'campaigns','daily_metrics','weekly_wraps','profile'
+    'campaigns','daily_metrics','keywords','targeting_asins',
+    'weekly_wraps','profile'
   ])
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY;', t);
@@ -179,7 +212,8 @@ END $$;
 CREATE OR REPLACE FUNCTION truncate_all_user_data() RETURNS void AS $$
 BEGIN
   TRUNCATE
-    wbs_tasks, task_done, logs, events, skus, campaigns, daily_metrics, weekly_wraps
+    wbs_tasks, task_done, logs, events, skus, campaigns,
+    daily_metrics, keywords, targeting_asins, weekly_wraps
   RESTART IDENTITY CASCADE;
   UPDATE profile SET name = '', role = '', market = 'Amazon US' WHERE id = 1;
 END;
@@ -203,7 +237,8 @@ DECLARE
 BEGIN
   FOR t IN SELECT unnest(ARRAY[
     'wbs_tasks','task_done','logs','skus',
-    'campaigns','daily_metrics','weekly_wraps','profile'
+    'campaigns','daily_metrics','keywords','targeting_asins',
+    'weekly_wraps','profile'
   ])
   LOOP
     EXECUTE format('DROP TRIGGER IF EXISTS %I_touch ON %I;', t, t);

@@ -1,8 +1,8 @@
-// SKU Management + PPC Campaigns
+// SKU Management + PPC Campaigns + Targeting
 import React, { useState, useMemo } from 'react'
 import {
   IPlus, IChev, IChevL, ISearch,
-  IDollar, ICart, ITrend, IBox,
+  IDollar, ICart, ITrend, IBox, ITarget,
 } from './icons.jsx'
 import { todayISO } from './usePersisted.js'
 
@@ -583,6 +583,277 @@ export function PPCPage({ campaigns, setCampaigns, skus }) {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===== TARGETING: Keyword + Ad ASIN management per SKU =====
+const MATCH_COLORS = { Exact: "blue", Phrase: "orange", Broad: "gray" };
+
+export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, setTargetingAsins }) {
+  const [selectedSku, setSelectedSku] = useState(skus[0]?.sku || null);
+  const [activeTab, setActiveTab] = useState("keywords"); // "keywords" | "asins"
+
+  // Keyword add form
+  const blankKw = { keyword: "", match_type: "Exact", bid: 1.0, status: "active", note: "" };
+  const [kwDraft, setKwDraft] = useState(blankKw);
+  const [addingKw, setAddingKw] = useState(false);
+
+  // ASIN add form
+  const blankAsin = { asin: "", title: "", bid: 1.0, status: "active", note: "" };
+  const [asinDraft, setAsinDraft] = useState(blankAsin);
+  const [addingAsin, setAddingAsin] = useState(false);
+
+  React.useEffect(() => {
+    if (!selectedSku && skus.length > 0) setSelectedSku(skus[0].sku);
+  }, [skus, selectedSku]);
+
+  React.useEffect(() => { setAddingKw(false); setAddingAsin(false); }, [selectedSku]);
+
+  const skuObj = skus.find(s => s.sku === selectedSku);
+  const skuKws   = keywords.filter(k => k.sku === selectedSku);
+  const skuAsins = targetingAsins.filter(a => a.sku === selectedSku);
+
+  const activeKws   = skuKws.filter(k => k.status === "active");
+  const activeAsins = skuAsins.filter(a => a.status === "active");
+  const avgKwBid   = activeKws.length ? activeKws.reduce((s, k) => s + k.bid, 0) / activeKws.length : 0;
+  const avgAsinBid = activeAsins.length ? activeAsins.reduce((s, a) => s + a.bid, 0) / activeAsins.length : 0;
+
+  const newId = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : "id" + Date.now();
+
+  const addKeyword = () => {
+    if (!selectedSku || !kwDraft.keyword.trim()) return;
+    setKeywords([...keywords, { id: newId(), sku: selectedSku, ...kwDraft, bid: parseFloat(kwDraft.bid) || 0 }]);
+    setKwDraft(blankKw);
+    setAddingKw(false);
+  };
+  const toggleKwStatus = (id) => setKeywords(keywords.map(k => k.id === id ? { ...k, status: k.status === "active" ? "paused" : "active" } : k));
+  const removeKeyword = (id) => { if (!confirm("키워드를 삭제하시겠습니까?")) return; setKeywords(keywords.filter(k => k.id !== id)); };
+
+  const addAsin = () => {
+    if (!selectedSku || !asinDraft.asin.trim()) return;
+    setTargetingAsins([...targetingAsins, { id: newId(), sku: selectedSku, ...asinDraft, bid: parseFloat(asinDraft.bid) || 0 }]);
+    setAsinDraft(blankAsin);
+    setAddingAsin(false);
+  };
+  const toggleAsinStatus = (id) => setTargetingAsins(targetingAsins.map(a => a.id === id ? { ...a, status: a.status === "active" ? "paused" : "active" } : a));
+  const removeAsin = (id) => { if (!confirm("광고 ASIN을 삭제하시겠습니까?")) return; setTargetingAsins(targetingAsins.filter(a => a.id !== id)); };
+
+  if (skus.length === 0) {
+    return (
+      <div className="page">
+        <div className="page-header">
+          <div>
+            <h1 className="page-title">Targeting</h1>
+            <p className="page-subtitle">SKU별 키워드 · 광고 ASIN 관리</p>
+          </div>
+        </div>
+        <div className="empty-state">
+          <div style={{fontSize:14,fontWeight:500,marginBottom:4}}>먼저 SKU를 등록해주세요</div>
+          <div style={{fontSize:12.5,color:"var(--fg-tertiary)"}}>좌측 메뉴 <strong>SKUs</strong>에서 상품을 먼저 등록하세요.</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="page">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Targeting</h1>
+          <p className="page-subtitle">SKU별 키워드 · 광고 ASIN 관리 · {skus.length}개 SKU</p>
+        </div>
+      </div>
+
+      {/* SKU selector */}
+      <div className="ppc-sku-selector">
+        <label className="ppc-sku-selector-label">SKU 선택</label>
+        <div className="ppc-sku-selector-row">
+          <select className="input ppc-sku-select" value={selectedSku || ""}
+                  onChange={(e) => setSelectedSku(e.target.value || null)}>
+            <option value="">— SKU를 선택하세요 —</option>
+            {skus.map(s => (
+              <option key={s.sku} value={s.sku}>
+                {s.sku} · {s.name}
+              </option>
+            ))}
+          </select>
+          {skuObj && (
+            <div className="ppc-sku-selector-meta">
+              <span><span style={{color:"var(--fg-tertiary)"}}>ASIN</span> <code style={{fontFamily:"var(--font-mono)",fontSize:11.5}}>{skuObj.asin}</code></span>
+              <span><span style={{color:"var(--fg-tertiary)"}}>재고</span> <strong>{skuObj.stock}</strong></span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* KPI grid */}
+      <div className="kpi-grid" style={{gridTemplateColumns:"repeat(4,1fr)"}}>
+        <div className="kpi">
+          <div className="kpi-label"><span className="ic"><ITarget size={14}/></span><span>활성 키워드</span></div>
+          <div className="kpi-value">{activeKws.length}<span style={{fontSize:16,color:"var(--fg-tertiary)",fontWeight:500}}>/{skuKws.length}</span></div>
+          <div className="kpi-meta"><span>전체 대비 활성</span></div>
+        </div>
+        <div className="kpi">
+          <div className="kpi-label"><span className="ic" style={{background:"rgba(0,122,255,.12)",color:"var(--accent)"}}><IDollar size={14}/></span><span>KW 평균 입찰가</span></div>
+          <div className="kpi-value">{activeKws.length ? "$" + avgKwBid.toFixed(2) : "—"}</div>
+          <div className="kpi-meta"><span>활성 키워드 기준</span></div>
+        </div>
+        <div className="kpi">
+          <div className="kpi-label"><span className="ic" style={{background:"rgba(52,199,89,.12)",color:"var(--green)"}}><ITarget size={14}/></span><span>활성 광고 ASIN</span></div>
+          <div className="kpi-value">{activeAsins.length}<span style={{fontSize:16,color:"var(--fg-tertiary)",fontWeight:500}}>/{skuAsins.length}</span></div>
+          <div className="kpi-meta"><span>전체 대비 활성</span></div>
+        </div>
+        <div className="kpi">
+          <div className="kpi-label"><span className="ic" style={{background:"rgba(175,82,222,.12)",color:"var(--purple)"}}><IDollar size={14}/></span><span>ASIN 평균 입찰가</span></div>
+          <div className="kpi-value">{activeAsins.length ? "$" + avgAsinBid.toFixed(2) : "—"}</div>
+          <div className="kpi-meta"><span>활성 ASIN 기준</span></div>
+        </div>
+      </div>
+
+      {/* Tab toggle */}
+      <div className="segmented" style={{alignSelf:"flex-start",marginBottom:2}}>
+        <button aria-pressed={activeTab === "keywords"} onClick={() => setActiveTab("keywords")}>
+          키워드 ({skuKws.length})
+        </button>
+        <button aria-pressed={activeTab === "asins"} onClick={() => setActiveTab("asins")}>
+          광고 ASIN ({skuAsins.length})
+        </button>
+      </div>
+
+      {/* KEYWORDS tab */}
+      {activeTab === "keywords" && (
+        <div className="card" style={{padding:0,overflow:"hidden"}}>
+          <div style={{padding:"12px 16px",borderBottom:"0.5px solid var(--separator)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <span style={{fontSize:13,fontWeight:500}}>키워드 목록</span>
+            <button className="btn btn-primary" onClick={() => setAddingKw(true)} disabled={!selectedSku}><IPlus size={13}/><span>키워드 추가</span></button>
+          </div>
+
+          {addingKw && (
+            <div className="bid-add-row" style={{padding:"12px 16px",borderBottom:"0.5px solid var(--separator)"}}>
+              <input className="input" placeholder="키워드" style={{flex:2,minWidth:140}} value={kwDraft.keyword}
+                     onChange={(e) => setKwDraft({...kwDraft, keyword: e.target.value})}/>
+              <select className="input" style={{width:110}} value={kwDraft.match_type}
+                      onChange={(e) => setKwDraft({...kwDraft, match_type: e.target.value})}>
+                <option>Exact</option><option>Phrase</option><option>Broad</option>
+              </select>
+              <input className="input" type="number" step="0.01" placeholder="입찰가 ($)" style={{width:110}} value={kwDraft.bid}
+                     onChange={(e) => setKwDraft({...kwDraft, bid: e.target.value})}/>
+              <input className="input" placeholder="메모 (선택)" style={{flex:2}} value={kwDraft.note}
+                     onChange={(e) => setKwDraft({...kwDraft, note: e.target.value})}/>
+              <button className="btn" onClick={() => { setAddingKw(false); setKwDraft(blankKw); }}>취소</button>
+              <button className="btn btn-primary" onClick={addKeyword}>추가</button>
+            </div>
+          )}
+
+          <table className="table">
+            <thead>
+              <tr>
+                <th>키워드</th>
+                <th style={{width:100}}>매치 타입</th>
+                <th className="num" style={{width:100}}>입찰가</th>
+                <th style={{width:90}}>상태</th>
+                <th>메모</th>
+                <th style={{width:60}}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {skuKws.map(k => (
+                <tr key={k.id} style={{opacity: k.status === "paused" ? 0.55 : 1}}>
+                  <td style={{fontWeight:500}}>{k.keyword}</td>
+                  <td><span className={`pill ${MATCH_COLORS[k.match_type] || "gray"}`}>{k.match_type}</span></td>
+                  <td className="num" style={{fontWeight:600}}>${parseFloat(k.bid).toFixed(2)}</td>
+                  <td>
+                    <button className={`pill ${k.status === "active" ? "green" : "gray"}`}
+                            style={{cursor:"pointer",border:"none",background:"none",padding:0}}
+                            title="클릭하여 상태 전환"
+                            onClick={() => toggleKwStatus(k.id)}>
+                      {k.status}
+                    </button>
+                  </td>
+                  <td style={{color:"var(--fg-secondary)",fontSize:12.5}}>{k.note || <span style={{color:"var(--fg-quaternary)"}}>—</span>}</td>
+                  <td>
+                    <button className="icon-btn" onClick={() => removeKeyword(k.id)} style={{width:24,height:24,color:"var(--fg-tertiary)"}}>
+                      <svg width="12" height="12" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M5 5l8 8M13 5l-8 8"/></svg>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {skuKws.length === 0 && (
+                <tr><td colSpan="6" style={{textAlign:"center",padding:"36px 0",color:"var(--fg-tertiary)"}}>
+                  {selectedSku ? "등록된 키워드가 없습니다." : "SKU를 먼저 선택하세요."}
+                </td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* AD ASINs tab */}
+      {activeTab === "asins" && (
+        <div className="card" style={{padding:0,overflow:"hidden"}}>
+          <div style={{padding:"12px 16px",borderBottom:"0.5px solid var(--separator)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <span style={{fontSize:13,fontWeight:500}}>광고 ASIN 목록</span>
+            <button className="btn btn-primary" onClick={() => setAddingAsin(true)} disabled={!selectedSku}><IPlus size={13}/><span>ASIN 추가</span></button>
+          </div>
+
+          {addingAsin && (
+            <div className="bid-add-row" style={{padding:"12px 16px",borderBottom:"0.5px solid var(--separator)"}}>
+              <input className="input" placeholder="ASIN (예: B0XXXXXX)" style={{width:150}} value={asinDraft.asin}
+                     onChange={(e) => setAsinDraft({...asinDraft, asin: e.target.value})}/>
+              <input className="input" placeholder="상품명 (선택)" style={{flex:2}} value={asinDraft.title}
+                     onChange={(e) => setAsinDraft({...asinDraft, title: e.target.value})}/>
+              <input className="input" type="number" step="0.01" placeholder="입찰가 ($)" style={{width:110}} value={asinDraft.bid}
+                     onChange={(e) => setAsinDraft({...asinDraft, bid: e.target.value})}/>
+              <input className="input" placeholder="메모 (선택)" style={{flex:2}} value={asinDraft.note}
+                     onChange={(e) => setAsinDraft({...asinDraft, note: e.target.value})}/>
+              <button className="btn" onClick={() => { setAddingAsin(false); setAsinDraft(blankAsin); }}>취소</button>
+              <button className="btn btn-primary" onClick={addAsin}>추가</button>
+            </div>
+          )}
+
+          <table className="table">
+            <thead>
+              <tr>
+                <th style={{width:140}}>ASIN</th>
+                <th>상품명</th>
+                <th className="num" style={{width:100}}>입찰가</th>
+                <th style={{width:90}}>상태</th>
+                <th>메모</th>
+                <th style={{width:60}}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {skuAsins.map(a => (
+                <tr key={a.id} style={{opacity: a.status === "paused" ? 0.55 : 1}}>
+                  <td><code style={{fontFamily:"var(--font-mono)",fontSize:12}}>{a.asin}</code></td>
+                  <td style={{color:"var(--fg-secondary)",fontSize:12.5}}>{a.title || <span style={{color:"var(--fg-quaternary)"}}>—</span>}</td>
+                  <td className="num" style={{fontWeight:600}}>${parseFloat(a.bid).toFixed(2)}</td>
+                  <td>
+                    <button className={`pill ${a.status === "active" ? "green" : "gray"}`}
+                            style={{cursor:"pointer",border:"none",background:"none",padding:0}}
+                            title="클릭하여 상태 전환"
+                            onClick={() => toggleAsinStatus(a.id)}>
+                      {a.status}
+                    </button>
+                  </td>
+                  <td style={{color:"var(--fg-secondary)",fontSize:12.5}}>{a.note || <span style={{color:"var(--fg-quaternary)"}}>—</span>}</td>
+                  <td>
+                    <button className="icon-btn" onClick={() => removeAsin(a.id)} style={{width:24,height:24,color:"var(--fg-tertiary)"}}>
+                      <svg width="12" height="12" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M5 5l8 8M13 5l-8 8"/></svg>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {skuAsins.length === 0 && (
+                <tr><td colSpan="6" style={{textAlign:"center",padding:"36px 0",color:"var(--fg-tertiary)"}}>
+                  {selectedSku ? "등록된 광고 ASIN이 없습니다." : "SKU를 먼저 선택하세요."}
+                </td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
