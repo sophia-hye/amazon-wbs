@@ -70,7 +70,7 @@ function calcAll(inputs, rates) {
     const endStock     = prevEndStock + fbqty - m.targetUnits
     const endInventory = Math.max(0, endStock)
     const storage      = endInventory * rates.fbaStorageFee
-    const profPlan     = rates.professionalPlan
+    const profPlan     = m.targetUnits > 0 ? rates.professionalPlan : 0
 
     // ── 유통/물류 — per unit SOLD (amortised, matches spreadsheet)
     const inboundFee    = m.targetUnits * rates.inboundPlacementFee
