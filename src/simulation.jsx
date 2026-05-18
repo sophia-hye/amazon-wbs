@@ -147,9 +147,10 @@ const CW = CHART_W - PL - PR
 const CH = CHART_H - PT - PB
 
 const CHART_SERIES = [
-  { key: 'revenue', label: '매출',    color: '#007AFF' },
-  { key: 'adSpend', label: '광고비',  color: '#FF9500' },
-  { key: 'profit',  label: '영업이익', color: '#34C759' },
+  { key: 'revenue',    label: '매출',       color: '#007AFF' },
+  { key: 'adSpend',   label: '광고비',      color: '#FF9500' },
+  { key: 'profit',    label: '영업이익',    color: '#34C759' },
+  { key: 'cumProfit', label: '누적 영업이익', color: '#AF52DE' },
 ]
 
 function fK(v) {
@@ -162,9 +163,10 @@ function SimChart({ calc }) {
   const [hovIdx, setHovIdx] = useState(null)
 
   const data = calc.map((c) => ({
-    revenue: c.targetRevenue,
-    adSpend: c.adSpend,
-    profit:  c.operatingProfit,
+    revenue:   c.targetRevenue,
+    adSpend:   c.adSpend,
+    profit:    c.operatingProfit,
+    cumProfit: c.cumProfit,
   }))
 
   const allV   = data.flatMap((d) => [d.revenue, d.adSpend, d.profit])
@@ -292,7 +294,7 @@ function SimChart({ calc }) {
                 <div key={s.key} className="sim-tt-row">
                   <span className="sim-tt-label" style={{ color: s.color }}>{s.label}</span>
                   <span className="sim-tt-val"
-                    style={{ color: s.key === 'profit' && d[s.key] < 0 ? '#FF3B30' : undefined }}>
+                    style={{ color: (s.key === 'profit' || s.key === 'cumProfit') && d[s.key] < 0 ? '#FF3B30' : undefined }}>
                     {f$(d[s.key])}
                   </span>
                 </div>
