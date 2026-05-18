@@ -1304,8 +1304,10 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
         <button aria-pressed={activeTab === "asins"}    onClick={() => setActiveTab("asins")}>광고 ASIN ({skuAsins.length})</button>
       </div>
 
-      {activeTab === "keywords" && (selKw ? kwDetail : kwList)}
-      {activeTab === "asins"    && (selAsin ? asinDetail : asinList)}
+      <div style={{ marginTop: 8 }}>
+        {activeTab === "keywords" && (selKw ? kwDetail : kwList)}
+        {activeTab === "asins"    && (selAsin ? asinDetail : asinList)}
+      </div>
     </div>
   );
 }
