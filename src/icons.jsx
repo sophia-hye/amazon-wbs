@@ -39,3 +39,4 @@ export const ISettings = (p) => <Icon {...p}><circle cx="9" cy="9" r="2.5"/><pat
 export const IClose = (p) => <Icon {...p}><path d="M5 5l8 8M13 5l-8 8"/></Icon>;
 export const ISales = (p) => <Icon {...p}><rect x="2.5" y="3.5" width="13" height="11" rx="1.5"/><path d="M2.5 7.5H15.5M2.5 11H15.5M7 3.5v11"/></Icon>;
 export const ITarget = (p) => <Icon {...p}><circle cx="9" cy="9" r="6.5"/><circle cx="9" cy="9" r="3"/><circle cx="9" cy="9" r="1" fill="currentColor" stroke="none"/></Icon>;
+export const IEdit = (p) => <Icon {...p}><path d="M13.5 2.5l2 2L5.5 15.5H3.5v-2L13.5 2.5z"/><path d="M11.5 4.5l2 2"/></Icon>;

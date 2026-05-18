@@ -168,6 +168,7 @@ const keywordFromRow = (r) => ({
   status: r.status || 'active',
   note: r.note || '',
   keyword_type: r.keyword_type || 'positive',
+  created_at: r.created_at || null,
 })
 const KEYWORDS_OPTIONS = {
   orderBy: { column: 'keyword', ascending: true },
@@ -194,6 +195,7 @@ const targetingAsinFromRow = (r) => ({
   status: r.status || 'active',
   note: r.note || '',
   asin_type: r.asin_type || 'target',
+  created_at: r.created_at || null,
 })
 const TARGETING_ASINS_OPTIONS = {
   orderBy: { column: 'asin', ascending: true },

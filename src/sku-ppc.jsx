@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react'
 import {
   IPlus, IChev, IChevL, ISearch,
-  IDollar, ICart, ITrend, IBox, ITarget,
+  IDollar, ICart, ITrend, IBox, ITarget, IEdit,
 } from './icons.jsx'
 import { todayISO } from './usePersisted.js'
 
@@ -613,6 +613,12 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
   const [addingAsin, setAddingAsin] = useState(false);
   const [asinDraft,  setAsinDraft]  = useState({ asin: "", title: "", startBid: 1.0, note: "" });
 
+  // Inline editing
+  const [editingKwId,   setEditingKwId]   = useState(null);
+  const [kwEditDraft,   setKwEditDraft]   = useState({ keyword: "", match_type: "Exact", note: "" });
+  const [editingAsinId, setEditingAsinId] = useState(null);
+  const [asinEditDraft, setAsinEditDraft] = useState({ asin: "", title: "", note: "" });
+
   // Auto-select first SKU
   React.useEffect(() => {
     if (!selectedSku && skus.length > 0) setSelectedSku(skus[0].sku);
@@ -622,10 +628,11 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
   React.useEffect(() => {
     setSelectedKwId(null); setSelectedAsinId(null);
     setAddingBid(false); setAddingKw(false); setAddingAsin(false);
+    setEditingKwId(null); setEditingAsinId(null);
   }, [selectedSku]);
-  React.useEffect(() => { setSelectedKwId(null);   setAddingBid(false); setAddingKw(false);   }, [kwType]);
-  React.useEffect(() => { setSelectedAsinId(null); setAddingBid(false); setAddingAsin(false); }, [asinType]);
-  React.useEffect(() => { setSelectedKwId(null);   setSelectedAsinId(null); setAddingBid(false); }, [activeTab]);
+  React.useEffect(() => { setSelectedKwId(null);   setAddingBid(false); setAddingKw(false);   setEditingKwId(null);   }, [kwType]);
+  React.useEffect(() => { setSelectedAsinId(null); setAddingBid(false); setAddingAsin(false); setEditingAsinId(null); }, [asinType]);
+  React.useEffect(() => { setSelectedKwId(null);   setSelectedAsinId(null); setAddingBid(false); setEditingKwId(null); setEditingAsinId(null); }, [activeTab]);
   React.useEffect(() => {
     setAddingBid(false);
     setBidDraft({ date: todayISO(), bid: 1.0, note: "" });
@@ -665,6 +672,7 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
       keyword: kwDraft.keyword.trim(), match_type: kwDraft.match_type,
       bids: isNeg ? [] : [{ date: todayISO(), bid: parseFloat(kwDraft.startBid) || 0, note: "첫 입찰가" }],
       status: "active", note: kwDraft.note, keyword_type: kwType,
+      created_at: todayISO(),
     }]);
     setKwDraft({ keyword: "", match_type: "Exact", startBid: 1.0, note: "" });
     setAddingKw(false);
@@ -703,6 +711,7 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
       asin: asinDraft.asin.trim(), title: asinDraft.title,
       bids: isNeg ? [] : [{ date: todayISO(), bid: parseFloat(asinDraft.startBid) || 0, note: "첫 입찰가" }],
       status: "active", note: asinDraft.note, asin_type: asinType,
+      created_at: todayISO(),
     }]);
     setAsinDraft({ asin: "", title: "", startBid: 1.0, note: "" });
     setAddingAsin(false);
@@ -731,6 +740,33 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
   const removeAsinBid = (date) => setTargetingAsins(targetingAsins.map(a =>
     a.id === selAsin?.id ? { ...a, bids: (a.bids || []).filter(b => b.date !== date) } : a
   ));
+
+  // ── Inline editing ─────────────────────────────────────────────
+  const startEditKw = (k, e) => {
+    e.stopPropagation();
+    setEditingKwId(k.id);
+    setKwEditDraft({ keyword: k.keyword, match_type: k.match_type, note: k.note || "" });
+  };
+  const saveEditKw = () => {
+    if (!kwEditDraft.keyword.trim()) return;
+    setKeywords(keywords.map(k => k.id === editingKwId
+      ? { ...k, keyword: kwEditDraft.keyword.trim(), match_type: kwEditDraft.match_type, note: kwEditDraft.note }
+      : k));
+    setEditingKwId(null);
+  };
+
+  const startEditAsin = (a, e) => {
+    e.stopPropagation();
+    setEditingAsinId(a.id);
+    setAsinEditDraft({ asin: a.asin, title: a.title || "", note: a.note || "" });
+  };
+  const saveEditAsin = () => {
+    if (!asinEditDraft.asin.trim()) return;
+    setTargetingAsins(targetingAsins.map(a => a.id === editingAsinId
+      ? { ...a, asin: asinEditDraft.asin.trim(), title: asinEditDraft.title, note: asinEditDraft.note }
+      : a));
+    setEditingAsinId(null);
+  };
 
   // ── Helpers ───────────────────────────────────────────────────
   const matchPill = (match_type, keyword_type) => {
@@ -862,8 +898,8 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
       </div>
       <div className="ppc-perf">
         <div><span>최근 입찰가</span><strong>{latestBid(selKw.bids) != null ? "$" + latestBid(selKw.bids).toFixed(2) : "—"}</strong></div>
-        <div><span>최저</span><strong>{selKw.bids?.length ? "$" + Math.min(...selKw.bids.map(b=>b.bid)).toFixed(2) : "—"}</strong></div>
-        <div><span>최고</span><strong>{selKw.bids?.length ? "$" + Math.max(...selKw.bids.map(b=>b.bid)).toFixed(2) : "—"}</strong></div>
+        <div><span>최저 입찰가</span><strong>{selKw.bids?.length ? "$" + Math.min(...selKw.bids.map(b=>b.bid)).toFixed(2) : "—"}</strong></div>
+        <div><span>최고 입찰가</span><strong>{selKw.bids?.length ? "$" + Math.max(...selKw.bids.map(b=>b.bid)).toFixed(2) : "—"}</strong></div>
         <div><span>기록 수</span><strong>{selKw.bids?.length ?? 0}개</strong></div>
       </div>
       {selKw.bids?.length > 0 && (
@@ -901,8 +937,8 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
       </div>
       <div className="ppc-perf">
         <div><span>최근 입찰가</span><strong>{latestBid(selAsin.bids) != null ? "$" + latestBid(selAsin.bids).toFixed(2) : "—"}</strong></div>
-        <div><span>최저</span><strong>{selAsin.bids?.length ? "$" + Math.min(...selAsin.bids.map(b=>b.bid)).toFixed(2) : "—"}</strong></div>
-        <div><span>최고</span><strong>{selAsin.bids?.length ? "$" + Math.max(...selAsin.bids.map(b=>b.bid)).toFixed(2) : "—"}</strong></div>
+        <div><span>최저 입찰가</span><strong>{selAsin.bids?.length ? "$" + Math.min(...selAsin.bids.map(b=>b.bid)).toFixed(2) : "—"}</strong></div>
+        <div><span>최고 입찰가</span><strong>{selAsin.bids?.length ? "$" + Math.max(...selAsin.bids.map(b=>b.bid)).toFixed(2) : "—"}</strong></div>
         <div><span>기록 수</span><strong>{selAsin.bids?.length ?? 0}개</strong></div>
       </div>
       {selAsin.bids?.length > 0 && (
@@ -959,42 +995,87 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
         <thead>
           <tr>
             <th>키워드</th>
-            <th style={{ width: 120 }}>매치 타입</th>
-            {kwType === "positive" && <th className="num" style={{ width: 100 }}>최근 입찰가</th>}
-            {kwType === "positive" && <th className="num" style={{ width: 70 }}>기록</th>}
-            <th style={{ width: 90 }}>상태</th>
+            <th style={{ width: 100 }}>매치 타입</th>
+            {kwType === "positive" && <th className="num" style={{ width: 90 }}>최근 입찰가</th>}
+            {kwType === "positive" && <th className="num" style={{ width: 80 }}>최저 입찰가</th>}
+            {kwType === "positive" && <th className="num" style={{ width: 80 }}>최고 입찰가</th>}
+            {kwType === "positive" && <th style={{ width: 90 }}>등록일</th>}
+            <th style={{ width: 80 }}>상태</th>
             <th>메모</th>
-            <th style={{ width: kwType === "positive" ? 36 : 50 }}></th>
+            <th style={{ width: 64 }}></th>
           </tr>
         </thead>
         <tbody>
           {displayedKws.map(k => {
             const lb = latestBid(k.bids);
+            const minBid = k.bids?.length ? Math.min(...k.bids.map(b => b.bid)) : null;
+            const maxBid = k.bids?.length ? Math.max(...k.bids.map(b => b.bid)) : null;
+            if (editingKwId === k.id) return (
+              <tr key={k.id} style={{ background: "var(--bg-secondary)" }}>
+                <td>
+                  <input className="input" style={{ width: "100%", height: 28 }} autoFocus
+                    value={kwEditDraft.keyword}
+                    onChange={e => setKwEditDraft({ ...kwEditDraft, keyword: e.target.value })}
+                    onKeyDown={e => { if (e.key === "Enter") saveEditKw(); if (e.key === "Escape") setEditingKwId(null); }} />
+                </td>
+                <td>
+                  <select className="input" style={{ width: "100%", height: 28 }}
+                    value={kwEditDraft.match_type}
+                    onChange={e => setKwEditDraft({ ...kwEditDraft, match_type: e.target.value })}>
+                    {(k.keyword_type === "negative" ? NEGATIVE_MATCH_TYPES : POSITIVE_MATCH_TYPES).map(m => <option key={m}>{m}</option>)}
+                  </select>
+                </td>
+                {kwType === "positive" && <td className="num" style={{ color: "var(--fg-tertiary)", fontSize: 12.5 }}>{lb != null ? "$"+lb.toFixed(2) : "—"}</td>}
+                {kwType === "positive" && <td className="num" style={{ color: "var(--fg-tertiary)", fontSize: 12.5 }}>{minBid != null ? "$"+minBid.toFixed(2) : "—"}</td>}
+                {kwType === "positive" && <td className="num" style={{ color: "var(--fg-tertiary)", fontSize: 12.5 }}>{maxBid != null ? "$"+maxBid.toFixed(2) : "—"}</td>}
+                {kwType === "positive" && <td style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--fg-tertiary)" }}>{k.created_at?.slice(0, 10) || "—"}</td>}
+                <td><span className={`pill ${k.status === "active" ? "green" : "gray"}`}>{k.status}</span></td>
+                <td>
+                  <input className="input" style={{ width: "100%", height: 28 }}
+                    value={kwEditDraft.note}
+                    onChange={e => setKwEditDraft({ ...kwEditDraft, note: e.target.value })}
+                    onKeyDown={e => { if (e.key === "Enter") saveEditKw(); if (e.key === "Escape") setEditingKwId(null); }} />
+                </td>
+                <td style={{ paddingBlock: 6 }}>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    <button className="btn btn-primary" style={{ padding: "2px 8px", fontSize: 11.5, height: 26 }} onClick={saveEditKw}>저장</button>
+                    <button className="btn" style={{ padding: "2px 6px", fontSize: 11.5, height: 26 }} onClick={() => setEditingKwId(null)}>취소</button>
+                  </div>
+                </td>
+              </tr>
+            );
             return (
               <tr key={k.id} style={{ opacity: k.status === "paused" ? 0.5 : 1, cursor: kwType === "positive" ? "pointer" : "default" }}
                 onClick={kwType === "positive" ? () => setSelectedKwId(k.id) : undefined}>
                 <td style={{ fontWeight: 500 }}>{k.keyword}</td>
-                <td onClick={(e) => e.stopPropagation()}>{matchPill(k.match_type, k.keyword_type || "positive")}</td>
+                <td onClick={e => e.stopPropagation()}>{matchPill(k.match_type, k.keyword_type || "positive")}</td>
                 {kwType === "positive" && <td className="num" style={{ fontWeight: 600 }}>{lb != null ? "$"+lb.toFixed(2) : <span style={{ color: "var(--fg-quaternary)" }}>—</span>}</td>}
-                {kwType === "positive" && <td className="num" style={{ color: "var(--fg-tertiary)" }}>{k.bids?.length ?? 0}</td>}
-                <td onClick={(e) => e.stopPropagation()}>
+                {kwType === "positive" && <td className="num" style={{ color: "var(--fg-tertiary)" }}>{minBid != null ? "$"+minBid.toFixed(2) : <span style={{ color: "var(--fg-quaternary)" }}>—</span>}</td>}
+                {kwType === "positive" && <td className="num" style={{ color: "var(--fg-tertiary)" }}>{maxBid != null ? "$"+maxBid.toFixed(2) : <span style={{ color: "var(--fg-quaternary)" }}>—</span>}</td>}
+                {kwType === "positive" && <td style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--fg-tertiary)" }}>{k.created_at?.slice(0, 10) || <span style={{ color: "var(--fg-quaternary)" }}>—</span>}</td>}
+                <td onClick={e => e.stopPropagation()}>
                   <button className={`pill ${k.status === "active" ? "green" : "gray"}`}
                     style={{ cursor: "pointer", border: "none", background: "none", padding: 0 }}
                     onClick={() => toggleKwStatus(k.id)}>{k.status}</button>
                 </td>
                 <td style={{ color: "var(--fg-secondary)", fontSize: 12.5 }}>{k.note || <span style={{ color: "var(--fg-quaternary)" }}>—</span>}</td>
-                <td onClick={(e) => e.stopPropagation()}>
-                  {kwType === "positive"
-                    ? <span style={{ color: "var(--fg-quaternary)" }}><IChev size={14} /></span>
-                    : <button className="icon-btn" onClick={() => removeKeyword(k.id)} style={{ width: 24, height: 24, color: "var(--fg-tertiary)" }}>
-                        <svg width="12" height="12" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M5 5l8 8M13 5l-8 8" /></svg>
-                      </button>}
+                <td onClick={e => e.stopPropagation()}>
+                  <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
+                    <button className="icon-btn" title="편집" onClick={e => startEditKw(k, e)} style={{ width: 24, height: 24, color: "var(--fg-tertiary)" }}>
+                      <IEdit size={13} />
+                    </button>
+                    {kwType === "positive"
+                      ? <span style={{ color: "var(--fg-quaternary)" }}><IChev size={14} /></span>
+                      : <button className="icon-btn" onClick={() => removeKeyword(k.id)} style={{ width: 24, height: 24, color: "var(--fg-tertiary)" }}>
+                          <svg width="12" height="12" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M5 5l8 8M13 5l-8 8" /></svg>
+                        </button>}
+                  </div>
                 </td>
               </tr>
             );
           })}
           {displayedKws.length === 0 && (
-            <tr><td colSpan={kwType === "positive" ? 7 : 5} style={{ textAlign: "center", padding: "36px 0", color: "var(--fg-tertiary)" }}>
+            <tr><td colSpan={kwType === "positive" ? 9 : 5} style={{ textAlign: "center", padding: "36px 0", color: "var(--fg-tertiary)" }}>
               {selectedSku ? (kwType === "positive" ? "등록된 타겟 키워드가 없습니다." : "등록된 네거티브 키워드가 없습니다.") : "SKU를 먼저 선택하세요."}
             </td></tr>
           )}
@@ -1041,41 +1122,85 @@ export function TargetingPage({ skus, keywords, setKeywords, targetingAsins, set
           <tr>
             <th style={{ width: 140 }}>ASIN</th>
             <th>상품명</th>
-            {asinType === "target" && <th className="num" style={{ width: 100 }}>최근 입찰가</th>}
-            {asinType === "target" && <th className="num" style={{ width: 70 }}>기록</th>}
-            <th style={{ width: 90 }}>상태</th>
+            {asinType === "target" && <th className="num" style={{ width: 90 }}>최근 입찰가</th>}
+            {asinType === "target" && <th className="num" style={{ width: 80 }}>최저 입찰가</th>}
+            {asinType === "target" && <th className="num" style={{ width: 80 }}>최고 입찰가</th>}
+            {asinType === "target" && <th style={{ width: 90 }}>등록일</th>}
+            <th style={{ width: 80 }}>상태</th>
             <th>메모</th>
-            <th style={{ width: asinType === "target" ? 36 : 50 }}></th>
+            <th style={{ width: 64 }}></th>
           </tr>
         </thead>
         <tbody>
           {displayedAsins.map(a => {
             const lb = latestBid(a.bids);
+            const minBid = a.bids?.length ? Math.min(...a.bids.map(b => b.bid)) : null;
+            const maxBid = a.bids?.length ? Math.max(...a.bids.map(b => b.bid)) : null;
+            if (editingAsinId === a.id) return (
+              <tr key={a.id} style={{ background: "var(--bg-secondary)" }}>
+                <td>
+                  <input className="input" style={{ width: "100%", height: 28 }} autoFocus
+                    value={asinEditDraft.asin}
+                    onChange={e => setAsinEditDraft({ ...asinEditDraft, asin: e.target.value })}
+                    onKeyDown={e => { if (e.key === "Enter") saveEditAsin(); if (e.key === "Escape") setEditingAsinId(null); }} />
+                </td>
+                <td>
+                  <input className="input" style={{ width: "100%", height: 28 }}
+                    value={asinEditDraft.title}
+                    onChange={e => setAsinEditDraft({ ...asinEditDraft, title: e.target.value })}
+                    onKeyDown={e => { if (e.key === "Enter") saveEditAsin(); if (e.key === "Escape") setEditingAsinId(null); }} />
+                </td>
+                {asinType === "target" && <td className="num" style={{ color: "var(--fg-tertiary)", fontSize: 12.5 }}>{lb != null ? "$"+lb.toFixed(2) : "—"}</td>}
+                {asinType === "target" && <td className="num" style={{ color: "var(--fg-tertiary)", fontSize: 12.5 }}>{minBid != null ? "$"+minBid.toFixed(2) : "—"}</td>}
+                {asinType === "target" && <td className="num" style={{ color: "var(--fg-tertiary)", fontSize: 12.5 }}>{maxBid != null ? "$"+maxBid.toFixed(2) : "—"}</td>}
+                {asinType === "target" && <td style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--fg-tertiary)" }}>{a.created_at?.slice(0, 10) || "—"}</td>}
+                <td><span className={`pill ${a.status === "active" ? "green" : "gray"}`}>{a.status}</span></td>
+                <td>
+                  <input className="input" style={{ width: "100%", height: 28 }}
+                    value={asinEditDraft.note}
+                    onChange={e => setAsinEditDraft({ ...asinEditDraft, note: e.target.value })}
+                    onKeyDown={e => { if (e.key === "Enter") saveEditAsin(); if (e.key === "Escape") setEditingAsinId(null); }} />
+                </td>
+                <td style={{ paddingBlock: 6 }}>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    <button className="btn btn-primary" style={{ padding: "2px 8px", fontSize: 11.5, height: 26 }} onClick={saveEditAsin}>저장</button>
+                    <button className="btn" style={{ padding: "2px 6px", fontSize: 11.5, height: 26 }} onClick={() => setEditingAsinId(null)}>취소</button>
+                  </div>
+                </td>
+              </tr>
+            );
             return (
               <tr key={a.id} style={{ opacity: a.status === "paused" ? 0.5 : 1, cursor: asinType === "target" ? "pointer" : "default" }}
                 onClick={asinType === "target" ? () => setSelectedAsinId(a.id) : undefined}>
-                <td onClick={(e) => e.stopPropagation()}><code style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>{a.asin}</code></td>
+                <td onClick={e => e.stopPropagation()}><code style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>{a.asin}</code></td>
                 <td style={{ color: "var(--fg-secondary)", fontSize: 12.5 }}>{a.title || <span style={{ color: "var(--fg-quaternary)" }}>—</span>}</td>
                 {asinType === "target" && <td className="num" style={{ fontWeight: 600 }}>{lb != null ? "$"+lb.toFixed(2) : <span style={{ color: "var(--fg-quaternary)" }}>—</span>}</td>}
-                {asinType === "target" && <td className="num" style={{ color: "var(--fg-tertiary)" }}>{a.bids?.length ?? 0}</td>}
-                <td onClick={(e) => e.stopPropagation()}>
+                {asinType === "target" && <td className="num" style={{ color: "var(--fg-tertiary)" }}>{minBid != null ? "$"+minBid.toFixed(2) : <span style={{ color: "var(--fg-quaternary)" }}>—</span>}</td>}
+                {asinType === "target" && <td className="num" style={{ color: "var(--fg-tertiary)" }}>{maxBid != null ? "$"+maxBid.toFixed(2) : <span style={{ color: "var(--fg-quaternary)" }}>—</span>}</td>}
+                {asinType === "target" && <td style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--fg-tertiary)" }}>{a.created_at?.slice(0, 10) || <span style={{ color: "var(--fg-quaternary)" }}>—</span>}</td>}
+                <td onClick={e => e.stopPropagation()}>
                   <button className={`pill ${a.status === "active" ? "green" : "gray"}`}
                     style={{ cursor: "pointer", border: "none", background: "none", padding: 0 }}
                     onClick={() => toggleAsinStatus(a.id)}>{a.status}</button>
                 </td>
                 <td style={{ color: "var(--fg-secondary)", fontSize: 12.5 }}>{a.note || <span style={{ color: "var(--fg-quaternary)" }}>—</span>}</td>
-                <td onClick={(e) => e.stopPropagation()}>
-                  {asinType === "target"
-                    ? <span style={{ color: "var(--fg-quaternary)" }}><IChev size={14} /></span>
-                    : <button className="icon-btn" onClick={() => removeAsin(a.id)} style={{ width: 24, height: 24, color: "var(--fg-tertiary)" }}>
-                        <svg width="12" height="12" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M5 5l8 8M13 5l-8 8" /></svg>
-                      </button>}
+                <td onClick={e => e.stopPropagation()}>
+                  <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
+                    <button className="icon-btn" title="편집" onClick={e => startEditAsin(a, e)} style={{ width: 24, height: 24, color: "var(--fg-tertiary)" }}>
+                      <IEdit size={13} />
+                    </button>
+                    {asinType === "target"
+                      ? <span style={{ color: "var(--fg-quaternary)" }}><IChev size={14} /></span>
+                      : <button className="icon-btn" onClick={() => removeAsin(a.id)} style={{ width: 24, height: 24, color: "var(--fg-tertiary)" }}>
+                          <svg width="12" height="12" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M5 5l8 8M13 5l-8 8" /></svg>
+                        </button>}
+                  </div>
                 </td>
               </tr>
             );
           })}
           {displayedAsins.length === 0 && (
-            <tr><td colSpan={asinType === "target" ? 7 : 5} style={{ textAlign: "center", padding: "36px 0", color: "var(--fg-tertiary)" }}>
+            <tr><td colSpan={asinType === "target" ? 9 : 5} style={{ textAlign: "center", padding: "36px 0", color: "var(--fg-tertiary)" }}>
               {selectedSku ? (asinType === "target" ? "등록된 타겟 ASIN이 없습니다." : "등록된 네거티브 ASIN이 없습니다.") : "SKU를 먼저 선택하세요."}
             </td></tr>
           )}
