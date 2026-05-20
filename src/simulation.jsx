@@ -2,6 +2,13 @@ import { useState, useMemo } from 'react'
 
 const MONTHS = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월']
 
+// startMonth: 1~12 (1월 시작이면 1, 5월 시작이면 5)
+// 시작 월부터 12개월간의 라벨 배열을 반환
+function monthsFrom(startMonth) {
+  const s = ((startMonth - 1) % 12 + 12) % 12
+  return Array.from({ length: 12 }, (_, i) => MONTHS[(s + i) % 12])
+}
+
 // Per-month editable inputs
 // paidRatio: 유료광고 매출비율 (%) — primary driver; paidUnits is derived
 const INITIAL_INPUTS = [
@@ -166,7 +173,7 @@ function fK(v) {
   return v < 0 ? `(${s})` : s
 }
 
-function SimChart({ calc }) {
+function SimChart({ calc, monthLabels }) {
   const [hovIdx, setHovIdx] = useState(null)
 
   const data = calc.map((c) => ({
@@ -184,7 +191,7 @@ function SimChart({ calc }) {
   const vMax   = rawMax + vPad
   const vRange = vMax - vMin
 
-  const xOf = (i) => PL + (i / (MONTHS.length - 1)) * CW
+  const xOf = (i) => PL + (i / (monthLabels.length - 1)) * CW
   const yOf = (v)  => PT + CH - ((v - vMin) / vRange) * CH
 
   const rawStep = (vMax - vMin) / 5
@@ -261,8 +268,8 @@ function SimChart({ calc }) {
           )}
 
           {/* X labels */}
-          {MONTHS.map((m, i) => (
-            <text key={m} x={xOf(i)} y={CHART_H - PB + 14}
+          {monthLabels.map((m, i) => (
+            <text key={`${m}-${i}`} x={xOf(i)} y={CHART_H - PB + 14}
               textAnchor="middle" fontSize={10} fill="var(--fg-secondary)">
               {m}
             </text>
@@ -299,11 +306,11 @@ function SimChart({ calc }) {
         {hovIdx !== null && (() => {
           const d    = data[hovIdx]
           const pct  = xOf(hovIdx) / CHART_W * 100
-          const left = hovIdx < MONTHS.length / 2
+          const left = hovIdx < monthLabels.length / 2
           return (
             <div className="sim-tooltip"
               style={left ? { left: `${pct + 1}%` } : { right: `${100 - pct + 1}%` }}>
-              <div className="sim-tt-mo">{MONTHS[hovIdx]}</div>
+              <div className="sim-tt-mo">{monthLabels[hovIdx]}</div>
               {CHART_SERIES.map((s) => (
                 <div key={s.key} className="sim-tt-row">
                   <span className="sim-tt-label" style={{ color: s.color }}>{s.label}</span>
@@ -380,8 +387,11 @@ export function SimulationPage() {
   const [inputs, setInputs]             = useState(INITIAL_INPUTS)
   const [rates, setRates]               = useState(DEFAULT_RATES)
   const [showSettings, setShowSettings] = useState(false)
+  const [startMonth, setStartMonth]     = useState(1)
 
-  const calc = useMemo(() => calcAll(inputs, rates), [inputs, rates])
+  const calc        = useMemo(() => calcAll(inputs, rates), [inputs, rates])
+  const monthLabels = useMemo(() => monthsFrom(startMonth), [startMonth])
+  const endLabel    = monthLabels[monthLabels.length - 1]
 
   const handleCell = (idx, field, raw) => {
     const v = parseFloat(raw)
@@ -405,12 +415,26 @@ export function SimulationPage() {
         <div>
           <div className="page-title">매출 시뮬레이션</div>
           <div className="page-subtitle">
-            릴라헤이븐 Amazon US 2026년 1~12월 · 파란색 셀 입력 시 자동 계산
+            릴라헤이븐 Amazon US {monthLabels[0]}~{endLabel} (12개월) · 파란색 셀 입력 시 자동 계산
           </div>
         </div>
-        <button className="btn" onClick={() => setShowSettings((s) => !s)}>
-          {showSettings ? '설정 닫기' : '단가 · 수수료 설정'}
-        </button>
+        <div className="page-actions">
+          <label className="sim-start-month">
+            <span className="sim-start-month-label">시작 월</span>
+            <select
+              className="sim-start-month-sel"
+              value={startMonth}
+              onChange={(e) => setStartMonth(parseInt(e.target.value, 10))}
+            >
+              {MONTHS.map((m, i) => (
+                <option key={m} value={i + 1}>{m}</option>
+              ))}
+            </select>
+          </label>
+          <button className="btn" onClick={() => setShowSettings((s) => !s)}>
+            {showSettings ? '설정 닫기' : '단가 · 수수료 설정'}
+          </button>
+        </div>
       </div>
 
       {/* ── Rate settings panel */}
@@ -442,7 +466,7 @@ export function SimulationPage() {
       )}
 
       {/* ── Chart */}
-      <SimChart calc={calc} />
+      <SimChart calc={calc} monthLabels={monthLabels} />
 
       {/* ── Spreadsheet */}
       <div className="sim-scroll">
@@ -450,7 +474,7 @@ export function SimulationPage() {
           <thead>
             <tr>
               <th className="sim-lbl-th">항목</th>
-              {MONTHS.map((m) => <th key={m} className="sim-mo-th">{m}</th>)}
+              {monthLabels.map((m, i) => <th key={`${m}-${i}`} className="sim-mo-th">{m}</th>)}
             </tr>
           </thead>
           <tbody>

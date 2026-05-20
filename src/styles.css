@@ -1463,6 +1463,29 @@ button { font: inherit; color: inherit; }
 .sim-fee-inp:focus { border-color: var(--accent); background: var(--bg-elev-2); }
 .sim-fee-unit { font-size: 12px; color: var(--fg-tertiary); }
 
+.sim-start-month {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  background: var(--bg-elev);
+  border: 0.5px solid var(--separator);
+  border-radius: var(--radius);
+}
+.sim-start-month-label {
+  font-size: 12px; color: var(--fg-tertiary); font-weight: 500;
+}
+.sim-start-month-sel {
+  background: var(--bg-input);
+  border: 0.5px solid var(--separator);
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  padding: 3px 6px;
+  outline: none;
+  cursor: pointer;
+}
+.sim-start-month-sel:focus { border-color: var(--accent); background: var(--bg-elev-2); }
+
 /* Table wrapper */
 .sim-scroll {
   overflow-x: auto;
