@@ -10,20 +10,22 @@ function monthsFrom(startMonth) {
 }
 
 // Per-month editable inputs
+// 배열 순서 = 시작 월(startMonth)부터 12개월
+// 현재 기본값: 5월~12월은 기존 데이터 유지, 1~4월(내년)은 빈 값
 // paidRatio: 유료광고 매출비율 (%) — primary driver; paidUnits is derived
 const INITIAL_INPUTS = [
-  { aov: 14.99, targetUnits: 0,    fbqty: 0,    paidRatio: 90, acos: 130, opex: 0    },
-  { aov: 14.99, targetUnits: 0,    fbqty: 0,    paidRatio: 90, acos: 130, opex: 0    },
-  { aov: 14.99, targetUnits: 0,    fbqty: 0,    paidRatio: 90, acos: 130, opex: 0    },
-  { aov: 14.99, targetUnits: 0,    fbqty: 0,    paidRatio: 90, acos: 130, opex: 0    },
-  { aov: 14.99, targetUnits: 150,  fbqty: 173,  paidRatio: 85, acos: 120, opex: 2200 },
-  { aov: 14.99, targetUnits: 500,  fbqty: 575,  paidRatio: 80, acos: 110, opex: 700  },
-  { aov: 14.99, targetUnits: 650,  fbqty: 748,  paidRatio: 75, acos: 95,  opex: 700  },
-  { aov: 16.99, targetUnits: 700,  fbqty: 805,  paidRatio: 70, acos: 80,  opex: 700  },
-  { aov: 17.99, targetUnits: 750,  fbqty: 863,  paidRatio: 65, acos: 75,  opex: 700  },
-  { aov: 15.99, targetUnits: 950,  fbqty: 1093, paidRatio: 60, acos: 70,  opex: 700  },
-  { aov: 13.99, targetUnits: 1100, fbqty: 1265, paidRatio: 55, acos: 65,  opex: 700  },
-  { aov: 14.99, targetUnits: 1250, fbqty: 1438, paidRatio: 50, acos: 60,  opex: 700  },
+  { aov: 14.99, targetUnits: 150,  fbqty: 173,  paidRatio: 85, acos: 120, opex: 2200 }, // 5월
+  { aov: 14.99, targetUnits: 500,  fbqty: 575,  paidRatio: 80, acos: 110, opex: 700  }, // 6월
+  { aov: 14.99, targetUnits: 650,  fbqty: 748,  paidRatio: 75, acos: 95,  opex: 700  }, // 7월
+  { aov: 16.99, targetUnits: 700,  fbqty: 805,  paidRatio: 70, acos: 80,  opex: 700  }, // 8월
+  { aov: 17.99, targetUnits: 750,  fbqty: 863,  paidRatio: 65, acos: 75,  opex: 700  }, // 9월
+  { aov: 15.99, targetUnits: 950,  fbqty: 1093, paidRatio: 60, acos: 70,  opex: 700  }, // 10월
+  { aov: 13.99, targetUnits: 1100, fbqty: 1265, paidRatio: 55, acos: 65,  opex: 700  }, // 11월
+  { aov: 14.99, targetUnits: 1250, fbqty: 1438, paidRatio: 50, acos: 60,  opex: 700  }, // 12월
+  { aov: 14.99, targetUnits: 0,    fbqty: 0,    paidRatio: 90, acos: 130, opex: 0    }, // 1월 (내년)
+  { aov: 14.99, targetUnits: 0,    fbqty: 0,    paidRatio: 90, acos: 130, opex: 0    }, // 2월 (내년)
+  { aov: 14.99, targetUnits: 0,    fbqty: 0,    paidRatio: 90, acos: 130, opex: 0    }, // 3월 (내년)
+  { aov: 14.99, targetUnits: 0,    fbqty: 0,    paidRatio: 90, acos: 130, opex: 0    }, // 4월 (내년)
 ]
 
 // Unit rates & fee parameters (global settings)
@@ -387,7 +389,7 @@ export function SimulationPage() {
   const [inputs, setInputs]             = useState(INITIAL_INPUTS)
   const [rates, setRates]               = useState(DEFAULT_RATES)
   const [showSettings, setShowSettings] = useState(false)
-  const [startMonth, setStartMonth]     = useState(1)
+  const [startMonth, setStartMonth]     = useState(5)
 
   const calc        = useMemo(() => calcAll(inputs, rates), [inputs, rates])
   const monthLabels = useMemo(() => monthsFrom(startMonth), [startMonth])
