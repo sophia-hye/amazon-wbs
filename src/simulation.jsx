@@ -417,7 +417,7 @@ export function SimulationPage() {
         <div>
           <div className="page-title">매출 시뮬레이션</div>
           <div className="page-subtitle">
-            릴라헤이븐 Amazon US {monthLabels[0]}~{endLabel} (12개월) · 파란색 셀 입력 시 자동 계산
+            릴라헤이븐 Amazon US {monthLabels[0]}~{endLabel} (12개월) · 파란색 셀 입력 시 자동 계산 · 우측 시작 월 드롭다운에서 시작 월 변경 가능
           </div>
         </div>
         <div className="page-actions">

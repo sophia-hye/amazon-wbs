@@ -1465,26 +1465,28 @@ button { font: inherit; color: inherit; }
 
 .sim-start-month {
   display: inline-flex; align-items: center; gap: 8px;
-  padding: 6px 10px;
-  background: var(--bg-elev);
-  border: 0.5px solid var(--separator);
+  padding: 6px 12px;
+  background: var(--accent-bg);
+  border: 1px solid var(--accent);
   border-radius: var(--radius);
 }
 .sim-start-month-label {
-  font-size: 12px; color: var(--fg-tertiary); font-weight: 500;
+  font-size: 12px; color: var(--accent); font-weight: 600;
 }
 .sim-start-month-sel {
-  background: var(--bg-input);
-  border: 0.5px solid var(--separator);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--accent);
   border-radius: var(--radius-sm);
   color: var(--fg);
   font: inherit;
-  font-size: 13px;
-  padding: 3px 6px;
+  font-size: 13px; font-weight: 600;
+  padding: 4px 8px;
   outline: none;
   cursor: pointer;
+  min-width: 64px;
 }
-.sim-start-month-sel:focus { border-color: var(--accent); background: var(--bg-elev-2); }
+.sim-start-month-sel:hover { background: var(--bg-elev); }
+.sim-start-month-sel:focus { background: var(--bg-elev-2); }
 
 /* Table wrapper */
 .sim-scroll {
